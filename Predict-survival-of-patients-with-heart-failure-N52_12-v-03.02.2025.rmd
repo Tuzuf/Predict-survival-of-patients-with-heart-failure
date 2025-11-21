@@ -1,0 +1,1849 @@
+---
+title: "Predict survival of patients with heart failure"
+author: "Bilski Marcel, Czupryński Michał, Durawa Jakub, Fierek Patryk"
+date: "2025-01-28"
+output:
+  html_document:
+    code_folding: hide
+    theme: united  # Themes: default, cerulean, journal, flatly, readable
+    highlight: tango
+    toc: true      # Table of contents
+    toc_float: true  # Makes TOC float for easy navigation
+    number_sections: true  # Auto-number headings
+    df_print: kable  # Beautify tables
+---
+
+```{r, echo=FALSE, message= FALSE, warning= FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+```{r, echo=FALSE, message= FALSE, warning= FALSE}
+
+#If something doesnt work uncomment this chunk using Ctrl + Shift + C
+
+# install.packages("rpart", repos = "https://cran.rstudio.com/")
+# install.packages("rpart.plot", repos = "https://cran.rstudio.com/")
+# install.packages("tidyverse", repos = "https://cran.rstudio.com/")
+# install.packages("lubridate", repos = "https://cran.rstudio.com/")
+# install.packages("caret", repos = "https://cran.rstudio.com/")
+# install.packages("pROC", repos = "https://cran.rstudio.com/")
+# install.packages("uaparserjs", repos = "https://cran.rstudio.com/")
+# install.packages("rcompanion", repos = "https://cran.rstudio.com/")
+# install.packages("boot", repos = "https://cran.rstudio.com/")
+# install.packages("earth", repos = "https://cran.rstudio.com/")
+# install.packages("ggplot2", repos = "https://cran.rstudio.com/")
+# install.packages("survival", repos = "https://cran.rstudio.com/")
+# install.packages("survmisc", repos = "https://cran.rstudio.com/")
+# install.packages("survminer", repos = "https://cran.rstudio.com/")
+# install.packages("corrplot", repos = "https://cran.rstudio.com/")
+# install.packages("kableExtra", repos = "https://cran.rstudio.com/")
+# install.packages("tensr", repos = "https://cran.rstudio.com/")
+# install.packages("gtools", repos = "https://cran.rstudio.com/")
+# install.packages("MASS", repos = "https://cran.rstudio.com/")
+# install.packages("readxl", repos = "https://cran.rstudio.com/")
+# install.packages("mfp", repos = "https://cran.rstudio.com/")
+# install.packages("riskRegression", repos = "https://cran.rstudio.com/")
+# install.packages("pec", repos = "https://cran.rstudio.com/")
+# install.packages("rms", repos = "https://cran.rstudio.com/")
+# install.packages("survival", repos = "https://cran.rstudio.com/")
+# install.packages("CoxR2", repos = "https://cran.rstudio.com/")
+# install.packages("riskRegression", dependencies = TRUE, repos = "https://cran.rstudio.com/")
+
+```
+
+
+```{r, echo=FALSE, message= FALSE, warning= FALSE}
+sink(tempfile())  # Redirect output to a temporary file
+
+library(rpart)
+library(rpart.plot)
+library(tidyverse)
+library(lubridate)
+library(caret)
+library(pROC)
+library(uaparserjs)
+library(rcompanion)
+library(boot)
+library(earth)
+library(ggplot2)
+library(survival)
+library(survMisc)
+library(survminer)
+library(corrplot)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+library(gtools)
+library(CoxR2)
+library(gtools)
+library(MASS)
+library(readxl)
+library(mfp)
+library(splines)
+#library(riskRegression) #TA BIBLIOTEKA FAILUJE W knit
+library(pec)
+library(survival)
+
+sink()  # Restore normal output
+```
+
+
+# Wstęp
+
+
+W niniejszej analizie wykorzystano zbiór danych **Predict survival of patients with heart failure**. Badany jest wpływ zmiennych takich jak wiek, obecność anemii, cukrzycy, nadciśnienia, czy parametry laboratoryjne na przeżycie pacjentów cierpiących na niewydolność serca. Niewydolność serca jest poważnym schorzeniem, które znacząco wpływa na jakość życia i rokowanie pacjentów. Dane zostały zebrane w celu analizy czynników związanych z przeżywalnością pacjentów oraz oceny skuteczności stosowanych terapii. Jednostką badania jest zbiorowość 299 pacjentów. Zbiór danych zawiera następujące zmienne:
+
+- **time** – czas przeżycia w dniach. Jest to zmienna ilościowa określająca okres od momentu rozpoczęcia badania do wystąpienia zdarzenia (zgonu) lub zakończenia obserwacji (cenzurowanie). Czas przeżycia w badaniu wahał się od 4 do 285 dni. Mediana wynosi 115 dni, a średnia 130 dni. Rozkład cechuje się prawostronną asymetrią – większa część pacjentów była obserwowana przez krótszy okres.
+
+- **DEATH_EVENT** – status cenzurowania. Jest to zmienna binarna, gdzie wartość 1 oznacza zgon, a wartość 0 – obserwację cenzurowaną. W trakcie badania 96 pacjentów doświadczyło zdarzenia końcowego, co stanowi około 32% wszystkich przypadków.
+
+- **age** – wiek pacjenta w latach. Jest to zmienna ilościowa. Wiek pacjentów wynosił od 40 do 95 lat. Mediana to 60 lat, a średnia 60,83 lata. Rozkład jest symetryczny z lekkim przesunięciem w stronę wyższych wartości – większość pacjentów była w wieku emerytalnym.
+
+- **anaemia** – obecność anemii. Jest to zmienna jakościowa binarna (1 = Tak, 0 = Nie). Anemia występowała u 129 pacjentów (43%).
+
+- **creatinine_phosphokinase** – poziom enzymu CPK we krwi (U/L). Jest to zmienna ilościowa o bardzo szerokim zakresie wartości: od 23 do 7861 U/L. Mediana wynosi 250 U/L, a średnia 581 U/L. Rozkład charakteryzuje się silną prawostronną asymetrią – wysokie wartości występują rzadko.
+
+- **diabetes** – obecność cukrzycy. Jest to zmienna jakościowa binarna (1 = Tak, 0 = Nie). Cukrzyca została zdiagnozowana u 106 pacjentów (35%).
+
+- **ejection_fraction** – frakcja wyrzutowa serca (%). Jest to zmienna ilościowa, która mierzy procent krwi wypompowywanej z serca przy każdym skurczu. Wartości w badaniu mieściły się w zakresie od 14% do 80%, przy medianie wynoszącej 38%. Rozkład jest symetryczny z dominacją wartości w zakresie 20–40%.
+
+- **high_blood_pressure** – obecność nadciśnienia. Jest to zmienna jakościowa binarna (1 = Tak, 0 = Nie). Nadciśnienie występowało u 105 pacjentów (35%).
+
+- **platelets** – liczba płytek krwi (x10³/µL). Jest to zmienna ilościowa, której wartości mieszczą się w zakresie od 25 do 850 x10³/µL. Mediana wynosi 262 x10³/µL, a średnia 263 x10³/µL. Rozkład zmiennej jest symetryczny.
+
+- **serum_creatinine** – poziom kreatyniny w surowicy (mg/dL). Jest to zmienna ilościowa związana z funkcjonowaniem nerek. Wartości wynoszą od 0,5 mg/dL do 9,4 mg/dL, przy medianie 1,1 mg/dL i średniej 1,39 mg/dL. Rozkład zmiennej jest prawostronnie asymetryczny.
+
+- **serum_sodium** – poziom sodu w surowicy (mEq/L). Jest to zmienna ilościowa, której wartości mieszczą się w zakresie od 113 do 148 mEq/L. Mediana wynosi 137 mEq/L, a średnia 136,63 mEq/L. Rozkład jest symetryczny, z dominującymi wartościami w przedziale 135–140 mEq/L.
+
+- **sex** – płeć pacjenta. Jest to zmienna jakościowa binarna (1 = Mężczyzna, 0 = Kobieta). W badaniu dominowali mężczyźni, którzy stanowili 67% całej grupy (201 przypadków).
+
+- **smoking** – palenie tytoniu. Jest to zmienna jakościowa binarna (1 = Tak, 0 = Nie). Zaledwie 32% pacjentów (96 osób) zadeklarowało, że są palaczami.
+
+---
+
+ **Biblioteki wykorzystane do analizy**
+ 
+Do realizacji analizy wykorzystano następujące biblioteki w R:
+
+ - **rpart **
+ - **rpart.plot**
+ - **tidyverse**
+ - **lubridate**
+ - **caret**
+ - **pROC**
+ - **uaparserjs**
+ - **rcompanion**
+ - **boot**
+ - **earth**
+ - **ggplot2**
+ - **survival**
+ - **survMisc**
+ - **survminer**
+ - **corrplot**
+ - **dplyr**
+ - **knitr**
+ - **kableExtra**
+ - **gtools**
+ - **tensr**
+ - **CoxR2**
+ - **gtools**
+ - **MASS**
+ - **readxl**
+ - **mfp**
+ - **splines**
+ - **riskRegression**
+ - **pec**
+ - **survival**
+ 
+
+
+
+## Celem analizy jest:
+- **Identyfikacja czynników istotnie wpływających na przeżycie pacjentów.**
+- **Ocena ryzyka związanego z wybranymi zmiennymi za pomocą modelu Coxa.**
+- **Analiza różnic w funkcjach przeżycia między grupami pacjentów wydzielonymi na podstawie wybranych zmiennych.**
+
+# Podsumowanie danych
+
+
+```{r, echo=FALSE, message= FALSE, warning= FALSE}
+
+data <- read_excel("C:/Users/Marcel/Desktop/ahz/DANE.xlsx")
+
+#data <- DANE_xlsx
+
+summary(data)
+```
+
+## Weryfikacja braków w danych
+
+Nie znaleziono braków, co oznacza, że możemy przejść do dalszej analizy, bez potrzeby dodatkowego czyszczenia danych.
+```{r}
+NA_count <- colSums(is.na(data))
+NA_count
+```
+
+# Analiza badanych zmiennych i ich rozkłady
+
+## Zmienne o rozkładzie dwupunktowym
+
+### Rozkład zmiennej - Anemia; 
+- **Czy pacjent ma anemię (zmienna binarna: 1 = Tak, 0 = Nie)**
+
+Wyniki pokazują, że anemia jest istotnym problemem zdrowotnym w tej populacji, ponieważ dotyka znaczną liczbę pacjentów (około 40% w stosunku do grupy zdrowej). Warto przeanalizować, jakie czynniki mogą wpływać na występowanie anemii, oraz jak obecność tej choroby wpływa na inne zmienne w badaniu.
+
+```{r, warning= FALSE}
+ggplot(data, aes(x = factor(data$anaemia))) +
+  geom_bar(fill = "coral", color = "black") +
+  geom_text(stat = 'count', aes(label = ..count..), vjust = -0.5, size = 4) +
+  labs(title = "Rozkład zmiennej: Anemia", x = "Anemia (0 = Brak, 1 = Obecna)", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+### Rozkład zmiennej - występowanie cukrzycy; 
+- **Czy pacjent choruje na cukrzycę (zmienna binarna: 1 = Tak, 0 = Nie)**
+
+Cukrzyca dotyka znaczną część badanej populacji, gdyż około 40% pacjentów cierpi na to schorzenie. Wyniki te wskazują, że cukrzyca może być istotnym czynnikiem ryzyka lub zmienną wpływającą w analizie, szczególnie w połączeniu z innymi zmiennymi, takimi jak wiek, poziom cholesterolu czy anemii. Warto przeprowadzić dalsze analizy, aby zidentyfikować czynniki predykcyjne związane z obecnością cukrzycy w badanej grupie.
+
+```{r, warning= FALSE}
+ggplot(data, aes(x = factor(diabetes))) +
+  geom_bar(fill = "lightblue", color = "black") +
+  geom_text(stat = 'count', aes(label = ..count..), vjust = -0.5, size = 4) +
+  labs(title = "Rozkład zmiennej: Diabetes", x = "Diabetes (0 = Brak, 1 = Obecna)", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+###  Rozkład zmiennej - występowanie wysokiego ciśnienia krwi; 
+ **Czy pacjent ma nadciśnienie (zmienna binarna: 1 = Tak, 0 = Nie).**
+ **Jeżeli pacjent choruje na nadciśnienie tętnicze, ryzyko wystąpienia poniższych chorób wzrasta:**
+
+- **Miażdżyca**
+- **Choroba niedokrwienna serca**
+- **Zawał mięśnia sercowego**
+
+Większość pacjentów nie cierpi na wysokie ciśnienie krwi, jednak około 1/3 badanych ma taki problem. Wynik wskazuje, że wysokie ciśnienie krwi jest istotnym czynnikiem zdrowotnym w tej grupie pacjentów i warto uwzględnić je w dalszych analizach w kontekście innych zmiennych, takich jak wiek, obecność cukrzycy czy poziom cholesterolu.
+
+```{r, warning= FALSE}
+ggplot(data, aes(x = factor(data$high_blood_pressure))) +
+  geom_bar(fill = "green", color = "black") +
+  geom_text(stat = 'count', aes(label = ..count..), vjust = -0.5, size = 4) +
+  labs(title = "Rozkład zmiennej: High Blood Pressure", x = "High Blood Pressure (0 = Brak, 1 = Obecne)", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+### Rozkład zmiennej płeć; 
+– **Płeć pacjenta (zmienna binarna: 1 = Mężczyzna, 0 = Kobieta)**
+
+Wyniki wskazują na nierówną reprezentację płci w badaniu, z wyraźną przewagą mężczyzn. Może to być istotne przy interpretacji wyników i analizie zależności, ponieważ różnice w wynikach zdrowotnych mogą być związane z różnicami biologicznymi między płciami. Warto w dalszych analizach sprawdzić, jak płeć wpływa na inne zmienne, takie jak występowanie cukrzycy, wysokiego ciśnienia krwi czy anemii.
+
+
+
+```{r, warning= FALSE}  
+ggplot(data, aes(x = factor(data$sex))) +
+  geom_bar(fill = "purple", color = "black") +
+  geom_text(stat = 'count', aes(label = ..count..), vjust = -0.5, size = 4) +
+  labs(title = "Rozkład zmiennej: Sex", x = "Sex (0 = Kobieta, 1 = Mężczyzna)", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+### Rozkład zmiennej palenie; 
+
+– **Czy pacjent pali (zmienna binarna: 1 = Tak, 0 = Nie).** 
+– **Najczęstszym nowotworem u obu płci jest nowotwór płuc, więc osoby palące są bardziej narażone.**
+
+Wyniki sugerują, że większość badanej populacji nie pali, co może wpływać pozytywnie na ich zdrowie. Osoby palące stanowią jednak istotną grupę, którą warto uwzględnić w dalszych analizach, szczególnie w kontekście wpływu palenia na inne zmienne, takie jak występowanie chorób sercowo-naczyniowych, wysokiego ciśnienia czy anemii.
+```{r, warning= FALSE}
+ggplot(data, aes(x = factor(data$smoking))) +
+  geom_bar(fill = "orange", color = "black") +
+  geom_text(stat = 'count', aes(label = ..count..), vjust = -0.5, size = 4) +
+  labs(title = "Rozkład zmiennej: Smoking", x = "Smoking (0 = Nie pali, 1 = Pali)", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+### Rozkład zmiennej - Zdarzenie śmierci 
+- **Zdarzenie śmierci jest zmienną objaśnianą**
+
+Większość badanych pacjentów przeżyła, jednak odsetek pacjentów, którzy zmarli (około 32%), jest istotny w kontekście analiz. Dalsze badania mogą skupić się na identyfikacji czynników ryzyka, takich jak wiek, anemia, cukrzyca czy poziom cholesterolu, które mogły wpłynąć na zwiększone ryzyko zgonu.
+```{r, warning= FALSE}
+ggplot(data, aes(x = factor(data$DEATH_EVENT))) +
+  geom_bar(fill = "red", color = "black") +
+  geom_text(stat = 'count', aes(label = ..count..), vjust = -0.5, size = 4) +
+  labs(title = "Rozkład zmiennej: Death Event", x = "DEATH_EVENT (0 = Przeżył, 1 = Zmarł)", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+
+## Rozkłady zmiennych w skali nominalnej 
+
+### Rozkład zmiennej: Wiek - wiek pacjenta wyrażony w latach
+
+**Dominujące grupy wiekowe:**
+
+Najliczniejszą grupę stanowią pacjenci w przedziale wieku około 60-70 lat, gdzie najwyższy słupek osiąga wartość około 40 osób.
+Widać również mniejsze grupy pacjentów w młodszych przedziałach wiekowych, szczególnie w przedziale 40-50 lat.
+
+**Rozkład wieku:**
+
+Rozkład zmiennej wiek jest asymetryczny, z większą liczbą pacjentów w starszych grupach wiekowych.
+Liczba pacjentów maleje w miarę przesuwania się do skrajnie młodych lub bardzo starych przedziałów wiekowych.
+
+**Skrajne wartości:**
+
+Najmłodszy pacjent w badanej grupie ma około 30 lat, a najstarszy pacjent przekracza 80 lat.
+
+**Podsumowanie:**
+
+Rozkład wieku pacjentów wskazuje, że większość osób w badanej próbie to osoby w średnim i starszym wieku, z dominacją przedziału 60-70 lat. Warto zwrócić uwagę na wpływ wieku na inne zmienne, takie jak występowanie chorób przewlekłych (np. wysokiego ciśnienia, cukrzycy) lub zgonów.
+```{r, warning= FALSE}
+ggplot(data, aes(x = as.numeric(data$age))) +
+  geom_histogram(fill = "skyblue", color = "black", bins = 30) +
+  labs(title = "Rozkład zmiennej: Age", x = "Wiek", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+### Rozkład zmiennej - poziom enzymu CPK we krwi
+
+**Asymetria prawostronna:**
+
+Rozkład zmiennej charakteryzuje się silną asymetrią prawostronną, co oznacza, że większość pacjentów ma stosunkowo niskie wartości poziomu CPK, a tylko nieliczni mają znacznie wyższe poziomy.
+
+**Dominujące wartości:**
+
+Większość pacjentów ma poziom CPK w przedziale 0–500 jednostek.
+Liczba pacjentów z wyższymi wartościami (np. powyżej 2000 jednostek) gwałtownie maleje, co wskazuje na rzadkość występowania tak wysokich poziomów.
+
+**Ekstremalne wartości:**
+
+Występują pojedyncze przypadki z poziomem CPK przekraczającym 4000–8000 jednostek, które są znacząco wyższe od wartości typowych dla większości pacjentów. Mogą one wskazywać na szczególne przypadki kliniczne, takie jak poważne uszkodzenia mięśni lub zawał serca.
+
+**Podsumowanie:**
+
+Rozkład poziomu enzymu CPK w badanej próbie jest wyraźnie asymetryczny, z dominacją niskich wartości. Ekstremalnie wysokie wartości, choć rzadkie, mogą być związane z istotnymi problemami zdrowotnymi. Warto przeanalizować związek wysokiego poziomu CPK z innymi zmiennymi, np. występowaniem zawału, wysokiego ciśnienia krwi czy zgonów.
+
+```{r, warning= FALSE}
+ggplot(data, aes(x = as.numeric(data$creatinine_phosphokinase))) +
+  geom_histogram(fill = "lightgreen", color = "black", bins = 30) +
+  labs(title = "Rozkład zmiennej: Creatinine Phosphokinase", x = "Poziom enzymu CPK we krwi", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+### Rozkład zmiennej - Procent krwi wypompowywanej z serca 
+- **Procent krwi wypompowywanej z serca przy każdym skurczu wyrażony jako liczba całkowita w zakresie (0;100)**
+
+**Dominujące wartości frakcji wyrzutowej:**
+
+Największa liczba pacjentów ma frakcję wyrzutową w przedziale 30-50%, z najwyższym pikiem w okolicach 40%.
+Średnia wartość frakcji wyrzutowej znajduje się w tym zakresie, co wskazuje na typowy poziom funkcji serca w tej grupie badawczej.
+
+**Rzadkość ekstremalnych wartości:**
+
+Bardzo niskie wartości frakcji wyrzutowej (poniżej 20%) oraz bardzo wysokie wartości (powyżej 60%) są stosunkowo rzadkie.
+Wartości powyżej 70% są niemal nieobecne w badanej próbie, co potwierdza, że są one nietypowe.
+
+**Rozkład zmiennej:**
+
+Rozkład zmiennej jest lekko asymetryczny z przesunięciem w kierunku niższych wartości, co może wynikać z obecności pacjentów z upośledzoną funkcją serca.
+
+**Podsumowanie:**
+
+Frakcja wyrzutowa większości pacjentów mieści się w przedziale 30-50%, co może wskazywać na grupę z zaburzeniami funkcji serca, ponieważ prawidłowa frakcja wyrzutowa wynosi zwykle powyżej 50%. Ekstremalnie niskie wartości (<20%) mogą sugerować poważne problemy kardiologiczne, podczas gdy bardzo wysokie wartości są rzadkie.
+
+W dalszych analizach warto zbadać, jak frakcja wyrzutowa koreluje z innymi zmiennymi, takimi jak obecność zgonów, anemii czy cukrzycy.
+```{r, warning= FALSE}
+ggplot(data, aes(x = as.numeric(data$ejection_fraction))) +
+  geom_histogram(fill = "pink", color = "black", bins = 30) +
+  labs(title = "Rozkład zmiennej: Ejection Fraction", x = "Procent krwi wypompowywanej z serca przy każdym skurczu", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+### Rozkład zmiennej - Liczba płytek krwi
+- **Jeżeli wartość jest niska, mogą występować krwawienia.**
+
+- **Jeżeli jest duża to zakrzepy. Z zakrzepów może powstać zator, będący przyczyną zatorowości płucnej.**
+
+**Dominujące wartości liczby płytek krwi:**
+
+Większość pacjentów ma liczbę płytek krwi w zakresie od 200 000 do 300 000.
+Największa liczba pacjentów znajduje się w okolicach 250 000, co stanowi wartość bliską średniej w tej populacji.
+
+**Rozkład zmiennej:**
+
+Rozkład zmiennej jest lekko asymetryczny, z tendencją do występowania niższych wartości w porównaniu z typowymi zakresami.
+Pacjenci z bardzo wysoką liczbą płytek krwi (powyżej 600 000) są rzadkością i stanowią odległe obserwacje.
+
+**Ekstremalne wartości:**
+
+Obserwuje się pojedyncze przypadki, gdzie liczba płytek krwi przekracza 750 000, co może sugerować potencjalne problemy zdrowotne, takie jak zwiększona skłonność do zakrzepicy.
+
+**Podsumowanie:**
+Rozkład liczby płytek krwi jest skoncentrowany w typowym zakresie (200 000–300 000), co jest zgodne z normami dla zdrowej populacji. Rzadkie przypadki ekstremalnie wysokich wartości (powyżej 600 000) mogą wskazywać na zwiększone ryzyko zakrzepicy, co warto uwzględnić w dalszej analizie.
+
+```{r, warning= FALSE}
+ggplot(data, aes(x = as.numeric(data$platelets))) +
+  geom_histogram(fill = "orange", color = "black", bins = 30) +
+  labs(title = "Rozkład zmiennej: Platelets", x = "Liczba płytek krwi", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+### Rozkład zmiennej - Poziom kreatyniny w surowicy krwi. 
+- **Wysoki poziom kreatyniny, wskazuje na niewydolność nerek.**
+
+**Dominujące wartości poziomu kreatyniny:**
+
+Większość pacjentów ma poziom kreatyniny skoncentrowany w przedziale 0–1 mg/dl, co wskazuje na prawidłową funkcję nerek w tej grupie.
+Największa liczba pacjentów ma poziom kreatyniny bliski wartości 1 mg/dl.
+
+**Ekstremalne wartości:**
+
+Kilka pacjentów ma poziom kreatyniny powyżej 2 mg/dl, a wartości w zakresie 5–10 mg/dl występują niezwykle rzadko.
+Te wysokie wartości mogą wskazywać na poważne zaburzenia czynności nerek.
+
+**Rozkład zmiennej:**
+
+Rozkład zmiennej jest silnie asymetryczny prawostronnie, co oznacza, że znaczna większość pacjentów ma niskie wartości kreatyniny, a jedynie niewielka liczba ma wartości znacznie podwyższone.
+
+**Podsumowanie:**
+
+Większość pacjentów ma poziom kreatyniny w surowicy krwi w zakresie normy (<1 mg/dl). Nieliczne przypadki ekstremalnych wartości (>2 mg/dl) mogą wskazywać na poważne problemy zdrowotne, takie jak niewydolność nerek. Dalsze analizy mogą skupić się na powiązaniu podwyższonego poziomu kreatyniny z innymi zmiennymi, np. występowaniem zgonów, anemii czy wysokiego ciśnienia krwi.
+
+```{r, warning= FALSE}
+ggplot(data, aes(x = as.numeric(data$serum_creatinine))) +
+  geom_histogram(fill = "purple", color = "black", bins = 30) +
+  labs(title = "Rozkład zmiennej: Serum Creatinine", x = "Poziom kreatyniny", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+### Rozkład zmiennej - poziom sodu w surowicy krwi
+- **Niski poziom sodu może być wskaźnikiem niewydolności serca.**
+
+**Dominujące wartości poziomu sodu:**
+
+Najwięcej pacjentów ma poziom sodu w przedziale 135-145 mmol/l, co jest zgodne z zakresem uznawanym za normę dla zdrowych osób.
+Wartość najczęściej występująca to około 140 mmol/l.
+
+**Rzadkie przypadki niskiego poziomu sodu:**
+
+Wartości poniżej 130 mmol/l, które mogą wskazywać na niedobór sodu (hiponatremia), występują rzadko.
+Tego rodzaju obserwacje mogą wskazywać na niewydolność serca lub inne zaburzenia metaboliczne.
+
+**Rozkład zmiennej:**
+
+Rozkład zmiennej jest symetryczny i skoncentrowany wokół wartości typowych dla zdrowej populacji, z kilkoma wartościami ekstremalnie niskimi i wysokimi.
+
+**Podsumowanie:**
+
+Poziom sodu w surowicy krwi większości pacjentów mieści się w normie (135-145 mmol/l), co sugeruje brak zaburzeń elektrolitowych u dużej części grupy. Nieliczne przypadki hiponatremii mogą wskazywać na poważniejsze problemy zdrowotne, takie jak niewydolność serca.
+
+Warto zbadać korelację między niskim poziomem sodu a innymi zmiennymi, takimi jak występowanie zgonów czy zaburzeń metabolicznych.
+
+```{r, warning= FALSE}
+ggplot(data, aes(x = as.numeric(data$serum_sodium))) +
+  geom_histogram(fill = "red", color = "black", bins = 30) +
+  labs(title = "Rozkład zmiennej: Serum Sodium", x = "Poziom sodu", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+### Rozkład zmiennej czas - okres obserwacji w dniach
+
+**Dominujące okresy obserwacji:**
+
+Najwięcej pacjentów było obserwowanych przez okres około 150–200 dni, co jest widoczne jako najwyższy słupek na wykresie.
+Inne istotne grupy obejmują pacjentów obserwowanych przez około 50–100 dni oraz tych z krótszym okresem około 0–50 dni.
+
+**Różnorodność w czasie obserwacji:**
+
+Okresy obserwacji są rozłożone stosunkowo równomiernie w badanej grupie, co oznacza, że próba zawiera zarówno pacjentów z krótką, jak i dłuższą obserwacją.
+Wartości bliższe końcowi okresu (powyżej 250 dni) występują rzadziej.
+
+**Rozkład zmiennej:**
+
+Rozkład zmiennej jest rozproszony, bez wyraźnej koncentracji w jednym przedziale, co może sugerować różnorodne okresy monitorowania w zależności od stanu zdrowia pacjentów.
+
+**Podsumowanie:**
+
+Okres obserwacji pacjentów w badaniu jest zróżnicowany, z dominacją przedziału 150–200 dni, ale z równomiernym rozkładem także w innych przedziałach. Dalsze analizy mogą uwzględniać, jak długość okresu obserwacji koreluje z innymi zmiennymi, np. występowaniem zgonów czy obecnością przewlekłych chorób.
+
+```{r, warning= FALSE}
+ggplot(data, aes(x = as.numeric(data$time))) +
+  geom_histogram(fill = "cyan", color = "black", bins = 30) +
+  labs(title = "Rozkład zmiennej: Time", x = "Czas (dni)", y = "Liczba wystąpień") +
+  theme_minimal()
+```
+
+## Wykres pokazujący korelacje pomiędzy zmiennymi ilościowymi
+
+**Silne korelacje:**
+
+serum_creatinine i ejection_fraction: Obserwuje się umiarkowaną lub silną korelację ujemną, co sugeruje, że wyższy poziom kreatyniny w surowicy może być związany z niższą frakcją wyrzutową serca (mogą to być pacjenci z zaburzeniami funkcji serca).
+serum_creatinine i time: Umiarkowana korelacja może sugerować, że pacjenci z wyższym poziomem kreatyniny byli monitorowani przez dłuższy czas.
+
+**Słabe lub brak korelacji:**
+
+creatinine_phosphokinase z innymi zmiennymi: Enzym CPK nie wykazuje silnych korelacji z innymi zmiennymi, co może wskazywać, że jego poziom jest niezależny od tych czynników.
+age z pozostałymi zmiennymi: Wiek nie wydaje się być silnie skorelowany z żadną z pozostałych zmiennych.
+
+**Dodatnie korelacje:**
+
+serum_sodium i ejection_fraction: Obserwuje się słabą dodatnią korelację, co może wskazywać, że wyższy poziom sodu jest związany z lepszą funkcją serca.
+
+**Podsumowanie:**
+
+Silne korelacje, takie jak między kreatyniną a frakcją wyrzutową, mogą wskazywać na zależności kliniczne.
+Brak korelacji w przypadku niektórych zmiennych (np. creatinine_phosphokinase) sugeruje, że mogą one działać niezależnie.
+
+```{r Korelogram zmiennych numerycznych, warning=FALSE}
+zmienne_numeryczne <- data[, c("age", "creatinine_phosphokinase", "ejection_fraction", 
+                         "platelets", "serum_creatinine", "serum_sodium", "time")]
+
+zmienne_numeryczne <- as.data.frame(lapply(zmienne_numeryczne, as.numeric))
+
+macierz_kor_zm_numerycznych <- cor(zmienne_numeryczne, use = "complete.obs", method = "pearson")
+
+corrplot(macierz_kor_zm_numerycznych, method = "color", type = "upper", 
+         tl.col = "black", tl.srt = 45, title = "Macierz korelacji zmiennych ilościowych", mar = c(0, 0, 1, 0))
+```
+
+# Statystyki względem płci zmiennych ilościowych
+```{r}
+zmienne_numeryczne <- c("age", "creatinine_phosphokinase", "ejection_fraction", 
+                        "platelets", "serum_creatinine", "serum_sodium", "time")
+
+data[zmienne_numeryczne] <- lapply(data[zmienne_numeryczne], as.numeric)
+
+# Obliczanie statystyk w rozróżnieniu na płeć
+statystyki_ilosciowe <- data %>%
+  group_by(sex) %>%
+  summarise(across(all_of(zmienne_numeryczne), 
+    list(
+      N = ~sum(!is.na(.x)),  # Liczba obserwacji bez NA
+      Mean = ~mean(.x, na.rm = TRUE),
+      Min = ~min(.x, na.rm = TRUE),
+      Max = ~max(.x, na.rm = TRUE),
+      Sd = ~sd(.x, na.rm = TRUE)
+    ), .names = "{.col}_{.fn}"))
+
+statystyki_ilosciowe %>%
+  kable(format = "html", caption = "Statystyki opisowe w rozróżnieniu na płeć") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+
+# Statystyki względem płci dla zmiennych binarnych
+```{r}
+zmienne_jakosciowe <- c("anaemia", "diabetes", "high_blood_pressure", "smoking", "DEATH_EVENT")
+
+statystyki_jakosciowe <- data %>%
+  group_by(sex) %>%
+  summarise(across(all_of(zmienne_jakosciowe), 
+                   ~paste0(sum(.x == 1, na.rm = TRUE), "/", sum(.x == 0, na.rm = TRUE)),
+                   .names = "{.col}_counts")) %>%
+  ungroup()
+
+statystyki_jakosciowe %>%
+  kable(format = "html", caption = "Liczebność zmiennych jakościowych w rozróżnieniu na płeć") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+# Funkcja czasu trwania oraz skumulowanego hazardu
+## Kaplan-Meier
+
+**Początkowe prawdopodobieństwo przeżycia:**
+
+Na początku okresu obserwacji (czas = 0) prawdopodobieństwo przeżycia wynosi 1.0 (100%), co oznacza, że wszystkie osoby na początku badania żyją.
+
+**Spadek funkcji przeżycia w czasie:**
+
+Funkcja przeżycia systematycznie maleje, co wskazuje na kolejne zgony pacjentów w czasie trwania badania.
+Największe spadki widoczne są w pierwszych 100 dniach oraz w okolicach 150–200 dni, co sugeruje, że w tych okresach zmarła większa liczba pacjentów.
+
+**Asymptota w końcowym okresie:**
+
+Po 250 dniach krzywa przeżycia staje się płaska. Oznacza to, że w końcowym okresie obserwacji zgony stają się rzadsze, a prawdopodobieństwo przeżycia stabilizuje się.
+
+**Przedział ufności (linie przerywane):**
+
+Linie przerywane wokół głównej krzywej reprezentują 95% przedział ufności, pokazując niepewność oszacowań.
+Na początku przedział jest wąski (duża liczba osób w badaniu), ale wraz z czasem staje się szerszy (mniejsza liczba osób pozostających w badaniu).
+
+**Ogólne wnioski:**
+
+W badanej grupie widoczny jest spadek przeżycia w czasie, co może wskazywać na obecność czynników ryzyka zwiększających śmiertelność (np. choroby przewlekłe).
+Znaczny spadek funkcji przeżycia w pierwszych 150 dniach może sugerować, że większość zgonów w badanej grupie miała miejsce w początkowym okresie obserwacji.
+Przetrwanie w dłuższym okresie (powyżej 200 dni) staje się bardziej stabilne, ponieważ krzywa przeżycia wyrównuje się.
+
+```{r Kaplan-Meier, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+Surv(data$time, data$DEATH_EVENT)
+km <- survfit(Surv(data$time, data$DEATH_EVENT) ~ 1, conf.type="log", data=data)
+summary(km)
+```
+
+```{r}
+plot(km, 
+     main="Funkcja czasu trwania oraz skumulowanego hazardu",
+     xlab="Czas (dni)",
+     ylab="Prawdopodobieństwo przeżycia")
+lines(km,col="red")
+```
+
+
+## Nelson-Aalen
+
+**Prawdopodobieństwo przeżycia w czasie:**
+
+Wartość prawdopodobieństwa przeżycia maleje w miarę upływu czasu, co jest zgodne z intuicją: im dłużej trwa obserwacja, tym większe ryzyko wystąpienia zdarzenia (np. zgonu) dla pacjentów w badaniu.
+Charakter rosnącej linii hazardu sugeruje, że ryzyko zdarzenia zwiększa się z czasem.
+
+**Przyspieszenie prawdopodobieństwa przeżycia:**
+
+Krzywa wykazuje okresy szybszego prawdopodobieństwa śmierci w początkowej fazie obserwacji (do około 100 dni), co może sugerować, że ryzyko zdarzeń jest największe w pierwszych miesiącach.
+Po około 200 dniach krzywa rośnie wolniej, co sugeruje zmniejszenie tempa występowania zdarzeń w końcowej fazie badania.
+
+**Przedziały ufności:**
+
+Linie przerywane wokół głównej linii reprezentują 95% przedział ufności, który obrazuje niepewność oszacowań skumulowanego hazardu.
+Wraz z upływem czasu przedziały stają się szersze, co wynika z malejącej liczby pacjentów pozostających pod obserwacją.
+
+**Podsumowanie:**
+
+Prawdopdoobieństwo przeżycia maleje w czasie, co wskazuje na kumulowanie się ryzyka zdarzeń (np. zgonów) w badanej grupie.
+Największy spadek prawdobieństwa przeżycia obserwuje się w początkowym okresie badania, co sugeruje, że większość zdarzeń miała miejsce w pierwszych 100-150 dniach obserwacji.
+Końcowa stabilizacja prawdobobieństwa przeżycia może wynikać z mniejszej liczby pacjentów lub poprawy ich stanu zdrowia w dłuższym okresie.
+
+```{r Nelson-Aalen, fig.show='asis',  results='hide'}
+# Analiza metodą Nelson-Aalen
+Nels <- survfit(Surv(data$time, data$DEATH_EVENT) ~ 1, conf.type = "log-log", type = "fleming-harrington", data = data) 
+summary(Nels)  # Wyświetlenie szczegółów analizy
+plot(Nels,     
+     main="Nelson-Aalen", 
+     xlab="Czas (dni)", 
+     ylab="Prawdopodobieństwo przeżycia")     # Wykres krzywej przeżycia
+lines(Nels, col = "blue")  # Dodanie linii na wykresie
+
+```
+
+## Krzywe przeżycia według płci
+
+**Interpretacja:**
+
+- Hipoteza zerowa (H0): Nie ma różnic w przeżywalności między mężczyznami a kobietami.
+
+**Statystyka testu:**
+
+- tatystyka chi-kwadrat: 0.0405 – bardzo niska wartość testu wskazuje na minimalne różnice między obserwowanymi a oczekiwanymi zdarzeniami w obu grupach.
+- P-wartość: p = 0.84
+- Wartość p = 0.84 oznacza, że nie ma statystycznych podstaw do odrzucenia hipotezy zerowej. Jest ona znacznie większa niż typowy poziom istotności (np. 0,05).
+
+**Wniosek:**
+- Nie stwierdzono istotnych różnic w przeżywalności między mężczyznami a kobietami.
+- Wyniki sugerują, że płeć nie wpływa znacząco na czas przeżycia w analizowanej grupie badawczej.
+
+```{r}
+
+# Definicja zmiennej przeżycia i zmiennej grupującej
+Sex <- Surv(data$time, data$DEATH_EVENT) ~ data$sex
+
+# Test log-rank
+log_rank_test_sex <- survdiff(Surv(data$time, data$DEATH_EVENT) ~ sex, data = data)
+
+# Wyświetl wyniki
+print(log_rank_test_sex)
+```
+
+
+**Początkowe prawdopodobieństwo przeżycia:**
+
+Zarówno kobiety (linia czerwona), jak i mężczyźni (linia niebieska) rozpoczynają badanie z prawdopodobieństwem przeżycia równym 1.0 (100%), co oznacza, że wszyscy uczestnicy badania żyją na początku obserwacji.
+
+**Spadek prawdopodobieństwa przeżycia:**
+
+W obu grupach widoczny jest systematyczny spadek prawdopodobieństwa przeżycia w czasie, co wskazuje na zgony w obu grupach w trakcie trwania badania.
+Największe spadki w obu grupach występują w pierwszych 150 dniach.
+
+**Porównanie krzywych mężczyzn i kobiet
+:**
+
+Krzywe przeżycia dla kobiet i mężczyzn są bardzo podobne, co wskazuje na brak istotnych różnic w prawdopodobieństwie przeżycia między płciami.
+Minimalne różnice są widoczne w niektórych punktach, np. w okolicach 100-150 dni, gdzie prawdopodobieństwo przeżycia dla mężczyzn jest odrobinę wyższe.
+
+**Końcowa stabilizacja:**
+
+Po około 250 dniach krzywe przeżycia stają się płaskie w obu grupach, co oznacza brak dalszych zgonów w końcowej fazie obserwacji.
+Podsumowanie
+Krzywe przeżycia kobiet i mężczyzn są do siebie zbliżone, co sugeruje, że płeć nie jest istotnym czynnikiem różnicującym przeżycie w tej populacji.
+Obserwowane zgony koncentrują się głównie w pierwszych 150 dniach obserwacji.
+
+
+```{r}
+Sex = survfit(Surv(data$time, data$DEATH_EVENT) ~ sex, data = data, 
+              conf.type = "none", type = "fleming-harrington") 
+
+plot(Sex, col = c("red", "blue"), 
+     main = "Krzywe przeżycia według płci", 
+     xlab = "Czas (dni)", 
+     ylab = "Prawdopodobieństwo przeżycia")
+
+legend("topright", c("Kobieta", "Mężczyzna"), 
+       lty = 1, col = c("red", "blue"), bty = "n")
+```
+
+## Krzywa przeżycia w zależności od obecności cukrzycy
+
+**Interpretacja:**
+
+- Hipoteza zerowa (H0): Nie ma różnic w przeżywalności między grupą pacjentów z cukrzycą a grupą bez cukrzycy.
+
+**Statystyka testu:**
+
+- Statystyka chi-kwadrat wynosi 0, co wskazuje na brak różnic między obserwowanymi a oczekiwanymi zdarzeniami w obu grupach.
+- P-wartość: p=0.8
+- p=0.8 oznacza, że nie ma statystycznych podstaw do odrzucenia hipotezy zerowej. P-wartość jest znacznie większa niż typowy poziom istotności (np. 0,05).
+
+**Wniosek:**
+- Nie stwierdzono istotnych różnic w przeżywalności między pacjentami z cukrzycą a osobami bez cukrzycy.
+- Wyniki sugerują, że obecność cukrzycy nie wpływa znacząco na czas przeżycia w analizowanej grupie badawczej.
+
+
+
+```{r}
+# Definicja zmiennej przeżycia i zmiennej grupującej
+surv_diabetes <- Surv(data$time, data$DEATH_EVENT) ~ data$diabetes
+
+# Test log-rank
+log_rank_test <- survdiff(Surv(data$time, data$DEATH_EVENT) ~ diabetes, data = data)
+
+# Wyświetl wyniki
+print(log_rank_test)
+```
+
+
+**Początkowe prawdopodobieństwo przeżycia:**
+
+Na początku obserwacji (czas = 0 dni) obie grupy rozpoczynają z prawdopodobieństwem przeżycia wynoszącym 1.0 (100%).
+
+**Spadek prawdopodobieństwa przeżycia:**
+
+W obu grupach obserwuje się stopniowy spadek prawdopodobieństwa przeżycia w czasie.
+Pacjenci z cukrzycą (pomarańczowa linia) doświadczają szybszego spadku przeżycia w porównaniu do osób bez cukrzycy, co oznacza, że cukrzyca może być związana z wyższym ryzykiem zgonu.
+
+**Porównanie między grupami:**
+
+Po około 150 dniach widoczna jest wyraźniejsza różnica między grupami:
+Osoby bez cukrzycy mają wyższe prawdopodobieństwo przeżycia w tym punkcie czasowym.
+Różnica utrzymuje się i staje się bardziej widoczna w dalszych etapach obserwacji.
+
+**Końcowa stabilizacja:**
+
+Obie krzywe przeżycia stabilizują się pod koniec obserwacji (około 250 dni), co oznacza brak dalszych zgonów w tej fazie badania.
+Podsumowanie
+Pacjenci z cukrzycą mają niższe prawdopodobieństwo przeżycia w porównaniu z pacjentami bez cukrzycy, co sugeruje, że cukrzyca jest istotnym czynnikiem ryzyka w badanej populacji.
+Spadek przeżycia jest szczególnie widoczny w pierwszych 150 dniach obserwacji, co wskazuje na potencjalnie wyższe ryzyko w krótszym okresie u pacjentów z cukrzycą.
+
+```{r fig.show='asis', message=FALSE, warning=FALSE, results='hide'}
+summary(data$diabetes)
+
+data$diabetes <- as.factor(data$diabetes)
+
+surv_diabetes = survfit(Surv(data$time, data$DEATH_EVENT) ~ data$diabetes, data=data)
+summary(surv_diabetes)
+
+plot(surv_diabetes, col = c("orange2", "aquamarine3"), main = "Krzywe przeżycia w zależności od obecności cukrzyczy", xlab = "Czas", ylab = "Prawdopodobieństwo przeżycia", lwd = 2)
+legend("topright", legend = c("Diabetycy", "Osoby niechorujące na cukrzycę"), 
+       lty = 1, col = c("orange2", "aquamarine3"), bty = "n", lwd = 2)
+
+a <- ten(surv_diabetes)
+comp(a, p = c(0,1,1,0.5,0.5), q = c(1,0,1,0.5,2))
+b <- attr(a, "tft")
+print(cbind(b$tft$W, b$tft$pNorm))
+```
+
+## Krzywe przeżycia w zależności od obecności nadciśnienia tętniczego
+
+**Interpretacja:**
+
+- Hipoteza zerowa (H0): Nie ma różnic w przeżywalności między grupą pacjentów z nadciśnieniem tętniczym a grupą bez nadciśnienia.
+
+**Statystyka testu:**
+
+- Statystyka chi-kwadrat wynosi 4.406248, co wskazuje na pewne różnice między obserwowanymi a oczekiwanymi zdarzeniami w obu grupach.
+- P-wartość: p=0.0358
+- p=0.0358 oznacza, że istnieją statystyczne podstawy do odrzucenia hipotezy zerowej. P-wartość jest mniejsza niż typowy poziom istotności (np. 0,05).
+
+**Wniosek:**
+- Stwierdzono istotne różnice w przeżywalności między pacjentami z nadciśnieniem tętniczym a osobami bez nadciśnienia.
+- Wyniki sugerują, że obecność nadciśnienia tętniczego może wpływać na czas przeżycia w analizowanej grupie badawczej.
+
+```{r}
+# Definicja zmiennej przeżycia i zmiennej grupującej
+surv_high_blood_pressure = survfit(Surv(data$time, data$DEATH_EVENT) ~ data$high_blood_pressure, data=data)
+
+# Test log-rank
+log_rank_test_high <- survdiff(Surv(data$time, data$DEATH_EVENT) ~ high_blood_pressure, data = data)
+
+# Wyświetl wyniki
+print(log_rank_test_high)
+```
+
+**Początkowe prawdopodobieństwo przeżycia:**
+
+Obie grupy rozpoczynają obserwację z prawdopodobieństwem przeżycia wynoszącym 1.0 (100%), co oznacza, że na początku badania wszyscy pacjenci żyją.
+
+**Spadek prawdopodobieństwa przeżycia:**
+
+W obu grupach obserwuje się stopniowy spadek prawdopodobieństwa przeżycia w czasie, ale przebieg krzywych jest bardzo zbliżony.
+W początkowej fazie obserwacji różnice między grupami są minimalne.
+
+**Porównanie między grupami:**
+
+Osoby z nadciśnieniem tętniczym (linia czerwona) wydają się mieć lekko niższe prawdopodobieństwo przeżycia w dalszej fazie obserwacji (po około 150-200 dniach).
+Różnica w przeżyciu między grupami jest jednak niewielka, co może sugerować, że nadciśnienie tętnicze samo w sobie nie jest istotnym czynnikiem różnicującym przeżycie w tej populacji.
+
+**Końcowa stabilizacja:**
+
+W końcowej fazie obserwacji (po 250 dniach) krzywe przeżycia stabilizują się, co oznacza brak dalszych zgonów w badaniu.
+
+**Podsumowanie:**
+
+Nadciśnienie tętnicze może być związane z nieco wyższym ryzykiem zgonu, jednak różnice w przeżyciu między osobami z nadciśnieniem a osobami o ciśnieniu w normie są niewielkie.
+Przebieg krzywych wskazuje, że inne czynniki (np. wiek, poziom kreatyniny, cukrzyca) mogą mieć większy wpływ na przeżycie.
+
+```{r Wykres przeżycia nadciśnienie tętnicze, message=FALSE, warning=FALSE, results='hide'}
+summary(data$high_blood_pressure)
+
+data$high_blood_pressure <- as.factor(data$high_blood_pressure)
+
+surv_high_blood_pressure = survfit(Surv(data$time, data$DEATH_EVENT) ~ data$high_blood_pressure, data=data)
+summary(surv_high_blood_pressure)
+
+plot(surv_high_blood_pressure, col = c("red1", "blue"), main = "Krzywe przeżycia w zależności od posiadania nadciśnienia tętniczego", xlab = "Czas", ylab = "Prawdopodobieństwo przeżycia", lwd = 2)
+legend("topright", legend = c("Osoby chorujące na nadciśnienie tętnicze", "Osoby o ciśnieniu w normie"), 
+       lty = 1, col = c("red1", "blue"), bty = "n", lwd = 2)
+
+a <- ten(surv_high_blood_pressure)
+comp(a, p = c(0,1,1,0.5,0.5), q = c(1,0,1,0.5,2))
+b <- attr(a, "tft")
+print(cbind(b$tft$W, b$tft$pNorm))
+```
+
+## Krzywe przeżycia w zależności od anemii
+
+**Interpretacja:**
+
+- Hipoteza zerowa (H0): Nie ma różnic w przeżywalności między grupą pacjentów z anemią a grupą bez anemii.
+
+**Statystyka testu:**
+
+- Statystyka chi-kwadrat wynosi 2.726464, co wskazuje na pewne różnice między obserwowanymi a oczekiwanymi zdarzeniami w obu grupach.
+- P-wartość: p=0.0987
+- p=0.0987 oznacza, że nie ma statystycznych podstaw do odrzucenia hipotezy zerowej. P-wartość jest większa niż typowy poziom istotności (np. 0,05).
+
+**Wniosek:**
+- Nie stwierdzono istotnych różnic w przeżywalności między pacjentami z anemią a osobami bez anemii.
+- Wyniki sugerują, że obecność anemii nie wpływa znacząco na czas przeżycia w analizowanej grupie badawczej.
+
+```{r}
+# Definicja zmiennej przeżycia i zmiennej grupującej
+surv_high_blood_anaemia = survfit(Surv(data$time, data$DEATH_EVENT) ~ data$anaemia, data=data)
+
+# Test log-rank
+log_rank_test_anaemia <- survdiff(Surv(data$time, data$DEATH_EVENT) ~ anaemia, data = data)
+
+# Wyświetl wyniki
+print(log_rank_test_anaemia)
+```
+
+**Początkowe prawdopodobieństwo przeżycia:**
+
+Obie grupy zaczynają z prawdopodobieństwem przeżycia wynoszącym 1.0 (100%), co oznacza, że na początku badania wszyscy pacjenci żyją.
+
+**Spadek przeżycia w czasie:**
+
+Pacjenci z anemią (linia czerwona) mają nieco większy spadek przeżycia w porównaniu do osób bez anemii, szczególnie w początkowych fazach badania (pierwsze 100 dni).
+Pacjenci bez anemii (linia niebieska) wykazują wyższe prawdopodobieństwo przeżycia przez cały czas trwania obserwacji.
+
+**Końcowe różnice w przeżyciu:**
+
+W końcowej fazie (około 250 dni) różnice między grupami są bardziej widoczne. Pacjenci z anemią mają wyraźnie niższe prawdopodobieństwo przeżycia w porównaniu do osób bez anemii.
+
+**Wniosek ogólny:**
+
+Anemia może być istotnym czynnikiem wpływającym na niższe przeżycie pacjentów, co sugeruje konieczność uwzględnienia jej jako potencjalnego czynnika ryzyka w dalszych analizach.
+
+**Podsumowanie:**
+
+Pacjenci z anemią są bardziej narażeni na wcześniejsze zgony w porównaniu do pacjentów bez anemii.
+Różnice w przeżyciu są szczególnie widoczne w pierwszych 100 dniach oraz w końcowych fazach obserwacji.
+
+```{r Wykres przeżycia, Anemia, fig.show='asis', message=FALSE, warning=FALSE,results='hide'}
+summary(data$anaemia)
+
+data$anaemia <- as.factor(data$anaemia)
+
+surv_anaemia = survfit(Surv(data$time, data$DEATH_EVENT) ~ data$anaemia, data=data)
+summary(surv_anaemia)
+
+plot(surv_anaemia, col = c("red1", "blue"),main = "Krzywe przeżycia w zależności od anemii", xlab = "Czas", ylab = "Prawdopodobieństwo przeżycia", lwd = 2)
+legend("topright", legend = c("Osoby niechorujące na anemie", "Osoby chorujące na anemie"), 
+       lty = 1, col = c("red1", "blue"), bty = "n", lwd = 2)
+
+a <- ten(surv_anaemia)
+comp(a, p = c(0,1,1,0.5,0.5), q = c(1,0,1,0.5,2))
+b <- attr(a, "tft")
+print(cbind(b$tft$W, b$tft$pNorm))
+```
+
+## Krzywe przeżycia w zależności od palenia papierosów
+
+**Interpretacja:**
+
+- Hipoteza zerowa (H0): Nie ma różnic w przeżywalności między grupą palaczy a grupą niepalących.
+
+**Statystyka testu:**
+
+- Statystyka chi-kwadrat wynosi 0.002041704, co wskazuje na brak różnic między obserwowanymi a oczekiwanymi zdarzeniami w obu grupach.
+- P-wartość: p=0.9631
+- p=0.9631 oznacza, że nie ma statystycznych podstaw do odrzucenia hipotezy zerowej. P-wartość jest znacznie większa niż typowy poziom istotności (np. 0,05).
+
+**Wniosek:**
+- Nie stwierdzono istotnych różnic w przeżywalności między palaczami a osobami niepalącymi.
+- Wyniki sugerują, że palenie nie wpływa znacząco na czas przeżycia w analizowanej grupie badawczej.
+
+```{r}
+# Definicja zmiennej przeżycia i zmiennej grupującej
+surv_high_blood_smoking = survfit(Surv(data$time, data$DEATH_EVENT) ~ data$smoking, data=data)
+
+# Test log-rank
+log_rank_test_smoking <- survdiff(Surv(data$time, data$DEATH_EVENT) ~ smoking, data = data)
+
+# Wyświetl wyniki
+print(log_rank_test_smoking)
+```
+
+**Początkowe prawdopodobieństwo przeżycia:**
+
+Na początku badania (czas = 0) prawdopodobieństwo przeżycia wynosi 1.0 (100%) dla obu grup.
+
+**Przebieg krzywych w czasie:**
+
+Obie grupy doświadczają systematycznego spadku przeżycia w miarę upływu czasu.
+Krzywe przeżycia osób palących i niepalących są do siebie bardzo zbliżone, co sugeruje, że palenie papierosów nie ma znaczącego wpływu na przeżycie w badanej populacji.
+
+**Porównanie między grupami:**
+
+W początkowej fazie badania (pierwsze 100 dni) krzywe są niemal identyczne.
+Po około 150 dniach różnice zaczynają się lekko zaznaczać, ale pozostają minimalne.
+
+**Końcowa stabilizacja:**
+
+Obie grupy osiągają podobny poziom stabilizacji przeżycia pod koniec badania (około 250 dni).
+
+**Podsumowanie:**
+
+Palenie papierosów wydaje się nie wpływać znacząco na przeżycie w tej badanej populacji.
+Różnice między osobami palącymi a niepalącymi są minimalne, co sugeruje, że inne czynniki (np. wiek, obecność cukrzycy, anemia) mogą mieć większe znaczenie w kontekście przeżycia.
+
+```{r Wykres przeżycia, Palące, fig.show='asis', message=FALSE, warning=FALSE, results='hide'}
+summary(data$smoking)
+
+data$smoking <- as.factor(data$smoking)
+
+surv_smoking = survfit(Surv(data$time, data$DEATH_EVENT) ~ data$smoking, data=data)
+summary(surv_smoking)
+
+plot(surv_smoking, col = c("red1", "blue"),main = "Krzywe przeżycia w zależności od palenia papierosów", xlab = "Czas", ylab = "Prawdopodobieństwo przeżycia", lwd = 2)
+legend("topright", legend = c("Osoby palące", "Osoby niepalące"), 
+       lty = 1, col = c("red1", "blue"), bty = "n", lwd = 2)
+
+a <- ten(surv_smoking)
+comp(a, p = c(0,1,1,0.5,0.5), q = c(1,0,1,0.5,2))
+b <- attr(a, "tft")
+print(cbind(b$tft$W, b$tft$pNorm))
+```
+
+## Krzywe przeżycia w zależności od wieku
+
+**Przedział wiekowy:**
+
+40-50 lat: Obejmuje młodszych pacjentów, gdzie liczba obserwacji jest stosunkowo niewielka.
+51-60 lat: Widoczna koncentracja danych, sugerująca większą liczbę pacjentów w tym przedziale.
+61-70 lat: Największy pik liczby obserwacji, reprezentujący dominującą grupę wiekową.
+71-80 lat: Wyraźny spadek liczby pacjentów, ale nadal zauważalna liczba obserwacji.
+81+ lat: Starsi pacjenci, którzy stanowią niewielką część próby.
+
+**Interpretacja:**
+
+- Hipoteza zerowa (H0): Nie ma różnic w przeżywalności między grupami wiekowymi.
+
+**Statystyka testu:**
+
+- W większości porównań p-wartość > 0.05, co wskazuje na brak istotnych różnic w przeżywalności.
+- Istotne różnice (p < 0.05) pojawiają się głównie w porównaniach starszych grup wiekowych (71-80 vs 81+, 61-70 vs 81+).
+
+**Wniosek:**
+- Przeżywalność jest istotnie niższa w grupie 81+.
+- Nie wykazano istotnych różnic w przeżywalności między młodszymi grupami.
+- Wiek powyżej 70 lat może wpływać na przeżycie.
+
+```{r}
+
+data$age <- as.numeric(as.character(data$age))
+
+
+data$age_group <- cut(data$age, 
+                      breaks = c(40, 50, 60, 70, 80, Inf), 
+                      labels = c("40-50", "51-60", "61-70", "71-80", "81+"))
+
+
+age_groups <- levels(data$age_group)
+
+
+age_combinations <- combn(age_groups, 2, simplify = FALSE)
+
+
+log_rank_test_grupy_wiekowe <- list()
+
+# Pętla wykonująca test log-rank dla każdej kombinacji grup wiekowych
+for (pair in age_combinations) {
+  
+  # Tworzymy podzbiór danych tylko dla danej pary grup wiekowych
+  subset_data <- data %>% filter(age_group %in% pair)
+  
+  # Test log-rank
+  log_rank_test <- survdiff(Surv(time, DEATH_EVENT) ~ age_group, data = subset_data)
+  
+  # wynik testu w liście pod kluczem "grupa1 vs grupa2"
+  log_rank_test_grupy_wiekowe[[paste(pair[1], "vs", pair[2])]] <- log_rank_test
+}
+
+# Wyświetlenie wyników testów dla każdej pary grup wiekowych
+for (name in names(log_rank_test_grupy_wiekowe)) {
+  cat("\nTest log-rank dla grup wiekowych:", name, "\n")
+  print(log_rank_test_grupy_wiekowe[[name]])
+}
+```
+
+**Początkowe prawdopodobieństwo przeżycia:**
+
+Wszystkie grupy wiekowe zaczynają z prawdopodobieństwem przeżycia wynoszącym 1.0 (100%).
+
+**Spadek przeżycia w zależności od wieku:**
+
+Grupa 81+ lat (jasnoniebieska linia) wykazuje najszybszy spadek przeżycia, co oznacza, że osoby w tej grupie wiekowej są najbardziej narażone na zgony w trakcie badania.
+Grupa 71-80 lat (pomarańczowa linia) także charakteryzuje się znaczącym spadkiem przeżycia, ale nieco mniejszym niż grupa 81+.
+Grupy 40-50, 51-60 i 61-70 lat (fioletowa, niebieska i zielona linie) wykazują wyższe prawdopodobieństwo przeżycia przez cały okres obserwacji.
+
+**Końcowe różnice między grupami:**
+
+Grupa 40-50 lat ma najwyższe prawdopodobieństwo przeżycia na końcu obserwacji.
+Grupy 71-80 i 81+ lat kończą z najniższym prawdopodobieństwem przeżycia.
+
+**Różnice w czasie:**
+
+Różnice między grupami stają się bardziej widoczne po około 50 dniach obserwacji i utrzymują się przez cały okres badania.
+
+**Podsumowanie:**
+
+Wiek jest silnym czynnikiem różnicującym przeżycie w badanej populacji.
+Pacjenci w wieku powyżej 70 lat (szczególnie 81+) są najbardziej narażeni na zgony, co sugeruje, że wiek jest jednym z kluczowych czynników ryzyka.
+Młodsze grupy wiekowe (40-50 i 51-60 lat) mają znacznie lepsze wyniki przeżycia.
+
+
+```{r, fig.show='asis', message=FALSE, warning=FALSE, results='hide'}
+summary(data$age)
+
+# Upewniamy się, że zmienna age jest numeryczna
+data$age <- as.numeric(data$age)
+
+# Tworzymy nową zmienną age_group, która kategoryzuje wiek na trzy grupy
+data$age_group <- cut(data$age, breaks = c(40, 50, 60, 70, 80, Inf), labels = c("40-50", "51-60", "61-70", "71-80", "81+"))
+
+# Sprawdzamy rozkład nowej zmiennej age_group względem DEATH_EVENT
+table(data$age_group, data$DEATH_EVENT)
+
+# Tworzymy krzywą przeżycia dla grup wiekowych
+surv_age = survfit(Surv(data$time, data$DEATH_EVENT) ~ data$age_group, data = data)
+
+# Wykres krzywej przeżycia
+plot(surv_age, col = c("red", "blue", "green", "orange", "cyan"), main = "Krzywe przeżycia w zależności od grupy wiekowej", xlab = "Czas (dni)", ylab = "Prawdopodobieństwo przeżycia")
+legend("topright", c("40-50", "51-60", "61-70", "71-80", "81+"), lty = 1, col = c("red", "blue", "green", "orange", "cyan"), bty = "n")
+
+# Analiza statystyczna
+a <- ten(surv_age)
+comp(a, p = c(0, 1, 1, 0.5, 0.5), q = c(1, 0, 1, 0.5, 2))
+b <- attr(a, "tft")
+print(cbind(b$tft$W, b$tft$pNorm))
+```
+
+## Histogram poziomu sodu w surowicy
+
+**Najczęstsze wartości poziomu sodu:**
+
+Największa liczba pacjentów ma poziom sodu w przedziale 135-145 mmol/L, co wskazuje, że większość wyników mieści się w zakresie normy.
+
+**Skrajne wartości:**
+
+Nieliczne przypadki obserwowane są na skrajach rozkładu:
+Poziom sodu poniżej 130 mmol/L jest rzadki, ale wskazuje na potencjalnie niebezpieczny stan hiponatremii.
+Poziom powyżej 145 mmol/L (hipernatremia) występuje sporadycznie.
+
+**Rozkład danych:**
+
+Rozkład ma kształt lekko prawoskośny, z większą liczbą pacjentów w górnej części normy (140-145 mmol/L).
+Wyraźna koncentracja wokół wartości średnich sugeruje, że w większości przypadków poziom sodu jest stabilny i bliski typowym wartościom fizjologicznym.
+
+**Możliwe implikacje kliniczne:**
+
+Pacjenci z poziomem sodu poza normą (poniżej 135 mmol/L lub powyżej 145 mmol/L) mogą być bardziej narażeni na poważne problemy zdrowotne, takie jak zaburzenia elektrolitowe, co może wymagać dalszej analizy.
+
+**Podsumowanie:**
+
+Większość pacjentów w badanej populacji ma poziom sodu w normie (135-145 mmol/L), co świadczy o stabilnym stanie elektrolitowym. Jednak niewielka liczba pacjentów z hiponatremią lub hipernatremią wskazuje na grupy ryzyka, które mogą wymagać szczególnej uwagi.
+
+```{r, fig.show='asis', message=FALSE, warning=FALSE, results='hide'}
+data$serum_sodium <- as.numeric(data$serum_sodium)
+summary(data$serum_sodium)
+hist(data$serum_sodium, main = "Histogram poziomu sodu w surowicy", xlab = "Poziom sodu", ylab = "Liczba pacjentów")
+
+```
+
+
+## Krzywe przeżycia w zależności od poziomu sodu w surowicy
+
+Wykres przedstawia krzywe przeżycia pacjentów podzielonych na trzy grupy według poziomu sodu w surowicy:
+
+120-130 mmol/L (linia czerwona).
+131-140 mmol/L (linia niebieska).
+141-150 mmol/L (linia zielona).
+
+**Interpretacja:**
+
+- Hipoteza zerowa (H0): Nie ma różnic w przeżywalności między grupami poziomu sodu w surowicy.
+
+**Statystyka testu:**
+
+- W większości porównań p-wartość > 0.05, co wskazuje na brak istotnych różnic w przeżywalności.
+- Najniższe wartości p (< 0.05) pojawiają się w porównaniach niższych wartości sodu (120-130 vs 131-140, 120-130 vs 141-150), sugerując potencjalny wpływ hiponatremii na przeżycie.
+
+**Wniosek:**
+- Nie stwierdzono istotnych różnic w przeżywalności dla większości przedziałów sodu.
+- Niższy poziom sodu (120-130) może mieć wpływ na gorsze rokowanie w porównaniu do wyższych wartości.
+- Hiponatremia - stan, w którym poziom sodu w surowicy krwi jest poniżej normy, może być czynnikiem ryzyka w analizowanej grupie badawczej.
+
+```{r}
+
+data$serum_sodium_cat <- cut(
+  data$serum_sodium,
+  breaks = c(120, 130, 140, 150),  # Przedziały bazujące na histogramie
+  labels = c("120-130", "131-140", "141-150"),  # Intuicyjne etykiety
+  include.lowest = TRUE
+)
+
+
+sodium_groups <- levels(data$serum_sodium_cat)
+
+
+sodium_combinations <- combn(sodium_groups, 2, simplify = FALSE)
+
+
+log_rank_test_poziom_sodu <- list()
+
+
+for (pair in sodium_combinations) {
+  
+  
+  subset_data <- data %>% filter(serum_sodium_cat %in% pair)
+  
+  # Test log-rank
+  log_rank_test <- survdiff(Surv(time, DEATH_EVENT) ~ serum_sodium_cat, data = subset_data)
+  
+  # Zapisujemy wynik testu w liście pod kluczem "grupa1 vs grupa2"
+  log_rank_test_poziom_sodu[[paste(pair[1], "vs", pair[2])]] <- log_rank_test
+}
+
+
+for (name in names(log_rank_test_poziom_sodu)) {
+  cat("\nTest log-rank dla poziomu sodu:", name, "\n")
+  print(log_rank_test_poziom_sodu[[name]])
+}
+```
+
+**Początkowe prawdopodobieństwo przeżycia:**
+
+Wszystkie grupy rozpoczynają z prawdopodobieństwem przeżycia wynoszącym 1.0 (100%).
+
+**Przebieg krzywych:**
+
+- **Grupa 120-130 mmol/L (czerwona linia):**
+Wykazuje najszybszy spadek prawdopodobieństwa przeżycia, co wskazuje na najwyższe ryzyko zgonu wśród pacjentów z najniższym poziomem sodu.
+- **Grupa 131-140 mmol/L (niebieska linia):**
+Charakteryzuje się umiarkowanym ryzykiem zgonu i lepszym przeżyciem niż grupa z najniższym poziomem sodu.
+- **Grupa 141-150 mmol/L (zielona linia):**
+Ma najwyższe prawdopodobieństwo przeżycia przez cały okres obserwacji, co sugeruje, że wyższy poziom sodu jest związany z lepszymi wynikami.
+
+**Różnice między grupami:**
+
+Różnice między grupami stają się wyraźne po około 50 dniach obserwacji i utrzymują się przez cały okres badania.
+Pacjenci z poziomem sodu poniżej 131 mmol/L (grupa czerwona) są najbardziej narażeni na zgony.
+
+**Końcowe prawdopodobieństwo przeżycia:**
+
+Po 250 dniach przeżycie w grupie 141-150 mmol/L (zielona linia) jest najwyższe, a w grupie 120-130 mmol/L (czerwona linia) najniższe.
+
+**Podsumowanie:**
+
+Niski poziom sodu w surowicy (120-130 mmol/L) jest istotnym czynnikiem ryzyka i związany jest z najniższym przeżyciem.
+Wyższe poziomy sodu (131-140 mmol/L i 141-150 mmol/L) są związane z lepszymi wynikami przeżycia.
+Analiza wskazuje, że utrzymanie poziomu sodu w surowicy w wyższym zakresie może być korzystne dla pacjentów.
+
+
+```{r}
+# surv_serum_sodium=survfit(Surv(data$serum_sodium, data$DEATH_EVENT)~data$age_cat,data=data)
+# a=ten(surv_serum_sodium)
+# comp(a,p=c(0,1,1,0.5,0.5),q=c(1,0,1,0.5,2))
+# b=attr(a,"tft")
+# cbind(b$tft$W,b$tft$pNorm)
+
+# Konwersja zmiennej poziomu sodu na kategorie z intuicyjnymi przedziałami
+data$serum_sodium_cat <- cut(
+  data$serum_sodium,
+  breaks = c(120, 130, 140, 150),  # Przedziały bazujące na histogramie
+  labels = c("120-130", "131-140", "141-150"),  # Intuicyjne etykiety
+  include.lowest = TRUE
+)
+
+# Analiza przeżycia w zależności od poziomu sodu
+serum_sodium_cat <- survfit(
+  Surv(data$time, data$DEATH_EVENT) ~ data$serum_sodium_cat, 
+  data = data, 
+  conf.type = "none", 
+  type = "fleming-harrington"
+)
+
+# Wykres krzywych przeżycia
+plot(
+  serum_sodium_cat, 
+  col = c("red", "blue", "green"), 
+  main = "Krzywe przeżycia w zależności od poziomu sodu", 
+  xlab = "Czas (dni)", 
+  ylab = "Prawdopodobieństwo przeżycia",
+  lwd = 2
+)
+
+# Legenda
+legend(
+  "topright",
+  legend = c("120-130", "131-140", "141-150"),  # Aktualne przedziały
+  lty = 1, 
+  col = c("red", "blue", "green"),
+  bty = "n"
+)
+
+```
+
+# Model Coxa
+
+Model proporcjonalnych hazardów (PH) Coxa to jedno z najczęściej stosowanych narzędzi w analizie przeżycia. Służy do badania wpływu zmiennych objaśniających na czas do wystąpienia określonego zdarzenia. Jest to model semiparametryczny – nie zakłada konkretnej postaci funkcji hazardu bazowego, lecz umożliwia ocenę wpływu zmiennych objaśniających na ryzyko zdarzenia.
+
+Kluczową cechą modelu Coxa jest założenie proporcjonalności hazardów, co oznacza, że iloraz hazardów dla różnych jednostek pozostaje stały w czasie
+
+Główne kroki w budowie modelu PH Coxa obejmą:
+
+- oszacowanie parametrów modelu,
+- weryfikację założenia proporcjonalności hazardów,
+- wybór odpowiednich zmiennych i ich postaci,
+- ocenę dopasowania modelu,
+- analizę reszt w modelu.
+
+```{r}
+# Wyświetlenie kolumn danych
+colnames(data)
+
+# Model Coxa
+cox_data_v1 <- coxph(
+  Surv(time, DEATH_EVENT) ~ 
+    age + 
+    anaemia + 
+    creatinine_phosphokinase + 
+    diabetes + 
+    ejection_fraction + 
+    high_blood_pressure + 
+    platelets + 
+    serum_creatinine + 
+    serum_sodium + 
+    sex + 
+    smoking, 
+  data = data
+)
+
+# Wyświetlenie wyników podsumowania modelu
+summary(cox_data_v1)
+```
+## Interpretacja parametrów modelu Coxa:
+
+**Zmienne statystycznie istotne (p < 0.05):**
+
+**Wiek (age):**
+
+Wraz ze wzrostem wieku o 1 rok, hazard (ryzyko zgonu pod warunkiem przeżycia do danego momentu) rośnie o 4,7% (HR = 1.047), zakładając, że pozostałe czynniki pozostają niezmienione (ceteris paribus).
+
+**Anemia (anaemia):**
+
+Pacjenci z anemią mają hazard o 58,4% wyższy (HR = 1.584) niż pacjenci bez anemii, przy założeniu niezmienności innych zmiennych.
+
+**Kreatynina w surowicy (serum_creatinine):**
+
+Wzrost poziomu kreatyniny w surowicy o 1 jednostkę powoduje wzrost hazardu o 37,8% (HR = 1.378), przy założeniu niezmienności pozostałych czynników.
+
+**Ciśnienie krwi (high_blood_pressure):**
+
+Pacjenci z nadciśnieniem tętniczym mają hazard o 60,9% wyższy (HR = 1.609) w porównaniu do pacjentów z prawidłowym ciśnieniem, przy niezmienności innych zmiennych.
+
+**Frakcja wyrzutowa (ejection_fraction):**
+
+Wzrost frakcji wyrzutowej o 1% wiąże się z spadkiem hazardu o 4,8% (HR = 0.952), zakładając, że pozostałe czynniki pozostają niezmienione.
+
+**Fosfokinaza kreatynowa (creatinine_phosphokinase):**
+
+Wzrost poziomu fosfokinazy kreatynowej o 1 jednostkę powoduje wzrost hazardu o 0,02% (HR = 1.0002), co jest istotne statystycznie, choć efekt jest bardzo niewielki.
+
+**Zmienne marginalnie istotne (0.05 ≤ p < 0.1):**
+
+**Poziom sodu w surowicy (serum_sodium):**
+
+Wzrost poziomu sodu o 1 mmol/L powoduje spadek hazardu o 4,2% (HR = 0.958), jednak wynik jest marginalnie istotny (p = 0.057).
+
+**Zmienne nieistotne statystycznie (p ≥ 0.1):**
+
+**Cukrzyca (diabetes):**
+
+Brak istotnego wpływu cukrzycy na hazard (p = 0.5307).
+
+**Płeć (sex):**
+
+Płeć nie ma istotnego wpływu na hazard (p = 0.3452).
+
+**Palenie tytoniu (smoking):**
+
+Różnice w hazardzie między osobami palącymi a niepalącymi nie są istotne statystycznie (p = 0.6078).
+
+**Liczba płytek krwi (platelets):**
+
+Liczba płytek krwi nie wpływa istotnie na hazard (p = 0.6806).
+
+**Podsumowanie modelu:**
+Model Coxa wskazuje, że wiek, anemia, poziom kreatyniny w surowicy, ciśnienie krwi, frakcja wyrzutowa oraz poziom fosfokinazy kreatynowej mają istotny wpływ na przeżycie pacjentów.
+Wyższy poziom sodu w surowicy wydaje się obniżać ryzyko zgonu, jednak wynik jest marginalnie istotny.
+Pozostałe zmienne, takie jak cukrzyca, płeć, palenie tytoniu i liczba płytek, nie mają istotnego wpływu na ryzyko zgonu w tym modelu.
+
+
+## Estymacja modelu metoda krokowa ze wzgledu na kryterium akaike AIC (tu - metoda wsteczna)
+
+W wyniku tej procedury otrzymano model z 7 zmiennymi objasniajacymi: wiek, anemia, kinazy kreatynowa,frakcja wyrzutowa serca,nadciśnienie tętnicze ,ilość kreatny w surowicy, ilosć sodu w surowicy. 
+
+Zmienne na poziomie istotnosci 0,05 sa statystycznie rozne od 0 (czyli istotne), ponieważ p-value < 0,05.
+W wyniku estymacji metodą krokową wyrzucono zmienne: diabetes, platelets, sex, smoking.
+```{r}
+stepAIC(cox_data_v1,direction="backward")
+```
+
+## Otrzymany model z cox_data_v1 po użyciu AIC
+
+INTERPRETACJA PARAMETROW:
+
+- jeżeli wiek wzrośnie o rok, hazard (ryzyko zgonu pod warunkiem, że jednostka dożyje do danego momentu) rośnie o 4,5%, ceteris paribus,
+- pacjenci z obecnością anemii mają hazard o 56,2% wyższy niż pacjenci z anemią = 0, ceteris paribus,
+- wraz ze wzrostem kinazy kreatynowej o 1, hazard pozostaje niezmienny,
+- wraz ze wzrostem frakcji wyrzutowej serca o 1, hazard maleje o 4,7%, ceteris paribus,
+- pacjenci z obecnością nadciśnienia maja hazard o 64,3 wyższy niż pacjenci z ciśnieniem w normie, ceteris paribus,
+- wraz ze wzrostem kreatyny o 1, hazard rośnie o 36,9%, ceteris paribus,
+- wraz ze wzrostem sodu o 1, hazard rośnie o 55,3%, ceteris paribus.
+
+```{r}
+cox1_po_AIC <- coxph(formula = Surv(time, DEATH_EVENT) ~ age + anaemia + creatinine_phosphokinase + 
+    ejection_fraction + high_blood_pressure + serum_creatinine + 
+    serum_sodium, data = data)
+summary(cox1_po_AIC)
+```
+
+
+## WERYFIKACJA ZALOZENIA PROPORCJONALNOSCI
+
+Kluczowym założeniem modelu Coxa jest proporcjonalność hazardów, czyli stałość ilorazu hazardów w czasie. Aby model prawidłowo odzwierciedlał wpływ zmiennych objaśniających na rozkład czasu trwania, to założenie musi być spełnione dla każdej zmiennej w modelu.
+
+Jeżeli p > 0,05 to zostały spełnione zalożenia proporcjonalności
+dla zmiennej Ejection_fraction test nie wykazał spełnienia założenia, co oznacza konieczność usunięcia tej zmiennej z modelu.
+  
+  
+```{r}
+    km <- cox.zph(cox1_po_AIC, transform = 'km') #Kaplana-Meiera
+    print(km)
+    plot(km)
+```
+  
+
+## Estymacja modelu z wykorzystaniem zmiennych istotnych statystycznie oraz spełniających założenie o proporcjonalności
+
+INTERPRETACJA PARAMETROW:
+
+- jeżeli wiek wzrośnie o rok, hazard (ryzyko zgonu pod warunkiem, że jednostka dożyje do danego momentu) rośnie o 4,2%, ceteris paribus,
+- pacjenci z obecnością anemii mają hazard o 44,8% wyższy niż pacjenci z anemią = 0, ceteris paribus,
+- wraz ze wzrostem kinazy kreatynowej o 1, hazard rośnie o 0,002%, ceteris paribus,
+- pacjenci z obecnością nadciśnienia maja hazard o 60,4 wyższy niż pacjenci z ciśnieniem w normie, ceteris paribus,
+- wraz ze wzrostem kreatyny o 1, hazard rośnie o 28%, ceteris paribus,
+- wraz ze wzrostem sodu o 1, hazard maleje o 7,5%, ceteris paribus.
+
+```{r}
+  cox1_po_procjonalnosci <- coxph(formula = Surv(time, DEATH_EVENT) ~ age + anaemia + creatinine_phosphokinase + 
+     high_blood_pressure + serum_creatinine + 
+    serum_sodium, data = data)
+  summary(cox1_po_procjonalnosci)
+```
+
+  
+### Graficzna weryfikacja założenia proporcjonalności
+
+Metoda skalowanych reszt Schoenfelda jest jednym z najczęściej stosowanych narzędzi do weryfikacji założenia proporcjonalności hazardów w modelu Coxa. Reszty te mierzą różnicę między obserwowanymi a oczekiwanymi wartościami zmiennych dla jednostek, które doświadczyły zdarzenia 
+
+```{r Graficzna weryfikacja założenia proporcjonalności}
+     reszty <- resid(cox1_po_AIC, type="scaledsch") 
+     Time <- as.numeric(rownames(reszty))
+     zmienne <- names(data[,c(1,2,3,6,8,9)])
+     
+     par(mfrow = c(1,2))
+     for (i in 1:6) {
+       plot(log(Time), reszty[,i], xlab="ln(Czas)", main=zmienne[i],
+            ylab="Skalowane reszty Schoenfelda", pch=20, cex=0.7)
+       lines(smooth.spline(log(Time), reszty[,i] ), lwd=3 )
+     }
+     
+```
+  
+## Identyfikacja jednostek odstających 
+
+Jednostki odstające mogą mieć istotny wpływ na wyniki modelu proporcjonalnych hazardów (PH) Coxa. Ich identyfikacja i odpowiednia analiza pomagają w poprawie jakości dopasowania modelu oraz wiarygodności uzyskanych oszacowań.Są to obserwacje na wykresach wyraźnie oddalone od pozostałych. Charakteryzują się nietypową kombinacją zmiennych objaśniających i mogą mieć nadmierny wpływ na oszacowania parametrów modelu
+
+
+```{r Jednostki odstajace}
+     deviance <- residuals(cox1_po_procjonalnosci,type="deviance")
+     s <- cox1_po_procjonalnosci$linear.predictors
+     plot(s,deviance,main = "Wykres identyfikacji jednostek odstających", xlab="Liniowy predyktor",ylab="Reszty odchyleń",cex=0.5, pch=20)
+     abline(h=c(3,-3),lty=3)
+     
+     data$deviance <- deviance
+     c1 <- which(data$deviance< c(-3))
+```
+  
+## Jednostki wpływowe
+
+Jednostki wpływowe to obserwacje, które mają znaczący wpływ na oszacowania parametrów modelu. Mogą one powodować znaczne zmiany w wynikach analizy.
+Z próby usuwamy jednostki o numerach: 2, 13, 18, 20, 26, 29, 53, 61, 67, 132, 132, 218, 229, 229, 236, 290
+
+
+
+```{r jednostki wpływowe}
+     dfb <- residuals(cox1_po_procjonalnosci,type="dfbeta")
+     n <- dim(dfb)[1]
+     obs.nr <- c(1:n)
+     par(mfrow = c(1,2))
+     for (j in 1:6) {
+       plot(obs.nr,dfb[,j],xlab="Numer jednostki",ylab="Przyrost oceny parametru",
+            main=zmienne[j])
+     }
+     
+     a1 <- which(abs(dfb[,1])>(0.0015)) #usunac te jednostki
+     a2 <- which(abs(dfb[,2])>(0.03))
+     a3 <- which(abs(dfb[,3])>(0.00004))
+     a4 <- which(abs(dfb[,4])>(0.03))
+     a5 <- which(abs(dfb[,5])>(0.01))
+     a6 <- which(abs(dfb[,5])>(0.010))
+     
+     c <- sort(unique(c(a1,a2,a3,a4,a5,c1)))
+     data_1 <- data[-c,] #zredukowany zbior
+     
+```
+
+### Oszacowanie modelu na zredukowanej ilości jednostek
+
+**Interpretacja:**
+
+Model został oszacowany na zredukowanej ilości zmiennych, uwzględniając 285 obserwacji i 86 zdarzeń (zgony). Ostateczny model zawiera pięć zmiennych objaśniających: wiek, anemia, fosfokinaza kreatynowa, kreatynina w surowicy oraz sód w surowicy. Poniżej znajduje się szczegółowa interpretacja parametrów.
+
+**Interpretacja parametrów modelu:**
+**Wiek (age):**
+
+Wzrost wieku o 1 rok powoduje wzrost hazardu (ryzyka zgonu) o 5,0% (HR = 1.050), zakładając, że pozostałe zmienne pozostają niezmienne (ceteris paribus).
+Wiek jest zmienną istotną statystycznie (p < 0.001).
+
+**Anemia (anaemia):**
+
+Pacjenci z anemią mają hazard o 48,4% wyższy (HR = 1.484) w porównaniu do pacjentów bez anemii.
+Zmienna ta jest marginalnie istotna (p = 0.07974).
+
+**Fosfokinaza kreatynowa (creatinine_phosphokinase):**
+
+Wzrost poziomu fosfokinazy kreatynowej o 1 jednostkę nie wpływa istotnie na hazard (HR ≈ 1.0002, p = 0.88554).
+
+**Kreatynina w surowicy (serum_creatinine):**
+
+Wzrost poziomu kreatyniny w surowicy o 1 jednostkę powoduje wzrost hazardu o 45,1% (HR = 1.451), co jest istotne statystycznie (p < 0.001).
+
+**Sód w surowicy (serum_sodium):**
+
+Wzrost poziomu sodu w surowicy o 1 mmol/L powoduje spadek hazardu o 4,6% (HR = 0.954), zakładając niezmienność innych czynników.
+Zmienna ta jest istotna statystycznie (p = 0.00745).
+
+**Uwagi dotyczące dopasowania modelu:**
+**Konkordancja (C-index):**
+
+Wartość 0.74 wskazuje na dobrą zdolność modelu do rozróżniania pacjentów o różnym ryzyku zgonu.
+
+**Testy istotności:**
+
+**Test współczynnika wiarygodności (Likelihood ratio test):** p < 0.001.
+**Test Walda:** p < 0.001.
+**Test log-rank:** p < 0.001.
+
+Wszystkie testy potwierdzają, że model jest statystycznie istotny.
+
+**Podsumowanie:**
+
+Wiek, kreatynina w surowicy oraz poziom sodu w surowicy to kluczowe zmienne istotne statystycznie, które mają największy wpływ na ryzyko zgonu.
+Anemia jest marginalnie istotna i wymaga dalszej analizy.
+Fosfokinaza kreatynowa nie wykazuje istotnego wpływu na hazard w tej zredukowanej bazie danych.
+
+**Model jest dobrze dopasowany (C-index = 0.74) i spełnia założenia proporcjonalności hazardów.**
+
+```{r}
+     Cox_jednostki_wplywowe <-  coxph(formula = Surv(time, DEATH_EVENT) ~ age + anaemia + creatinine_phosphokinase + 
+     high_blood_pressure + serum_creatinine + 
+     serum_sodium, data = data_1)
+     summary(Cox_jednostki_wplywowe)
+```
+## Akaike
+
+ **Podsumowanie:**
+ 
+- Finalny model zawiera 5 zmiennych, które najlepiej opisują ryzyko zgonu w badanej populacji.
+- Istotne statystycznie zmienne: wiek, nadciśnienie, kreatynina w surowicy, sód w surowicy.
+- Zmienne marginalnie istotne: anemia (p = 0.07333).
+
+**Model jest dobrze dopasowany (C-index = 0.74), a procedura krokowa z użyciem AIC pozwoliła na optymalizację liczby zmiennych przy zachowaniu wysokiej jakości predykcji.**
+```{r Cox_jednostki_wplywowe AIC}
+     stepAIC(Cox_jednostki_wplywowe,direction="backward")
+```
+ 
+# Metoda reszt martyngalowych - badamy czy wystepuje liniowość
+Metoda reszt martyngalowych pozwala na identyfikację jednostek, które mogą być trudne do dopasowania w analizie przeżycia. Reszty te pokazują różnicę między rzeczywistymi a przewidywanymi wartościami zmiennej zależnej (czas przeżycia) w modelu. Jeżeli zmienna objaśniająca 𝑋 jest ilościowa, to wprowadzenie jej do modelu Coxa, jest równoważne przyjęciu założenia, że łączy ją związek liniowy z logarytmem hazardu
+ 
+## Reszty martyngałowe dla zmiennej age
+
+**age - występuje liniowość  **
+
+```{r}
+
+
+     zmn1 <- data_1$age
+     lab1 <- "Wiek pacjenta (lata)"
+     reszty1 <- resid(coxph(Surv(time,DEATH_EVENT)~1,data=data_1),type="martingale")
+     plot(zmn1, reszty1, main="Reszty martyngałowe w zależności od wieku pacjenta", xlab=lab1,ylab="Reszty martyngałowe",cex=0.6)
+     lines(lowess(zmn1, reszty1,delta=1),lwd=2)
+```
+     
+
+## Reszty martyngałowe dla zmiennej creatinine_phosphokinase
+
+**creatinine_phosphokinase - liniowość**
+
+```{r}
+     zmn2 <- data_1$creatinine_phosphokinase
+     lab2 <- "creatinine_phosphokinase"
+     reszty2 <- resid(coxph(Surv(time,DEATH_EVENT)~1,data=data_1),type="martingale")
+     plot(zmn2, reszty2,main = "Reszty martyngałowe w zależności od poziomu kinazy kreatyninowej", xlab=lab2,ylab="Reszty martyngałowe",cex=0.6)
+     lines(lowess(zmn2, reszty2,delta=1),lwd=2)
+```
+       
+     
+## Reszty martyngałowe dla zmiennej serum_creatinine
+
+**serum_creatinine - nie występuje liniowość**
+
+```{r}
+     zmn3 <- data_1$serum_creatinine
+     lab3 <- "serum_creatinine"
+     reszty3 <- resid(coxph(Surv(time,DEATH_EVENT)~1,data=data_1),type="martingale")
+     plot(zmn3, reszty3, main = "Reszty martyngałowe w zależności od poziomu kreatyniny", xlab=lab3,ylab="Reszty martyngałowe",cex=0.6)
+     lines(lowess(zmn3, reszty3,delta=1),lwd=2)
+```
+      
+  
+## Reszty martyngałowe dla zmiennej serum_sodium
+
+**serum_sodium - nie występuje liniowość**
+
+```{r}
+     zmn4 <- data_1$serum_sodium
+     lab4 <- "serum_sodium"
+     reszty4 <- resid(coxph(Surv(time,DEATH_EVENT)~1,data=data_1),type="martingale")
+     plot(zmn4, reszty4,main = "Reszty martyngałowe w zależności od poziomu sodu w surowicy", xlab=lab4,ylab="Reszty martyngałowe",cex=0.6)
+     lines(lowess(zmn4, reszty4,delta=1),lwd=2)
+```
+    
+    
+## TRANSFORMACJA ZMIENNEJ creatinine_phosphokinase
+### Dychotomizacja
+
+**Wartość przed dychotymizacją:**
+
+```{r}
+     Cox_dla_creatinine_phosphokinase <- coxph(Surv(time, DEATH_EVENT)~zmn2,data=data_1)
+     A1_dla_creatinine_phosphokinase <- round(AIC(Cox_jednostki_wplywowe),2) #akaike z modelu coxa
+     A1_dla_creatinine_phosphokinase
+     cutpoint_dla_creatinine_phosphokinase <- cutp(Cox_dla_creatinine_phosphokinase)$zmn2 ## optymalny punkt odciecia
+     c_dla_creatinine_phosphokinase <- (zmn2>=cutpoint_dla_creatinine_phosphokinase$zmn2[1])*1+0 #jezeli zmienna jest >= punktowi odciecia to przypisuje 1 w      przeciwnym wypadku 0
+```
+
+**Wartość po dychotymizacji:**
+```{r}
+     Cox_dla_creatinine_phosphokinase_d <- coxph(Surv(time, DEATH_EVENT)~c_dla_creatinine_phosphokinase,data=data_1)
+     A2_dla_creatinine_phosphokinase <- round(AIC(Cox_dla_creatinine_phosphokinase_d),2)
+     A2_dla_creatinine_phosphokinase
+```
+**Interpretacja:**
+
+Otrzymaliśmy gorszy wynik, ponieważ Akaike jest dużo wyższy niz przed dychotomizacją
+     
+### Wielomiany ulamkowe dla creatinine_phosphokinase
+
+```{r Wielomiany ulamkowe dla creatinine_phosphokinase}
+     m3_dla_creatinine_phosphokinase <- mfp(Surv(time,DEATH_EVENT)~ fp(zmn2, df = 4, select = 0.05),family=cox, data=data_1)
+     m3_dla_creatinine_phosphokinase
+     A3_dla_creatinine_phosphokinase <- round(AIC(m3_dla_creatinine_phosphokinase),2)
+     A3_dla_creatinine_phosphokinase
+```
+
+### Metoda wielomianowej funkcji sklejanej (splajn) dla creatinine_phosphokinase
+
+**Interpretacja:**
+
+- Względny hazard początkowo wzrasta dla niższych wartości CPK, a następnie spada, po czym ponownie wzrasta dla wyższych wartości.
+- Duża niepewność (szeroki przedział ufności) dla bardzo wysokich wartości CPK sugeruje mniejszą liczbę obserwacji w tym zakresie.
+- Gdy hazard względny jest powyżej 1, oznacza to zwiększone ryzyko śmierci w porównaniu do wartości odniesienia (np. średniego poziomu CPK).
+
+```{r}
+     int_dla_creatinine_phosphokinase <- quantile(na.omit(zmn2),probs=c(0.05,0.275,.5,.725,.95))
+     Cox_dla_creatinine_phosphokinase2 <- coxph(Surv(time,DEATH_EVENT)~ns(zmn2,knots=int_dla_creatinine_phosphokinase),data=data_1)
+     pred <- predict(Cox_dla_creatinine_phosphokinase2,type="terms",se.fit=TRUE, terms=1)
+     plot(na.omit(zmn2),exp(pred$fit),type="n",main = "Hazard względny w zależności od poziomu kinazy kreatyninowej",xlab=lab3,ylim=c(0,2.5),
+          ylab="Hazard względny")
+     lines(smooth.spline(na.omit(zmn2),exp(pred$fit+1.96*pred$se.fit)),lty=2)
+     lines(smooth.spline(na.omit(zmn2),exp(pred$fit-1.96*pred$se.fit)),lty=2)
+     lines(smooth.spline(na.omit(zmn2),exp(pred$fit)),lty=1)
+     abline(h=1,lty=3)
+     legend('topright',2,c("splajn","95% przedzial ufnosci"), lty=1:2, box.lty=0)
+     A4_dla_creatinine_phosphokinase  <- round(AIC(Cox_dla_creatinine_phosphokinase2),2)
+     A4_dla_creatinine_phosphokinase 
+```
+
+## TRANSFORMACJA ZMIENNEJ serum_creatinine
+### Dychotomizacja
+**Wartość przed dychotymizacją:**
+```{r}
+     Cox_dla_serum_creatinine <- coxph(Surv(time, DEATH_EVENT)~zmn3,data=data_1)
+     A1_dla_serum_creatinine <- round(AIC(Cox_jednostki_wplywowe),2) #akaike z modelu coxa
+     A1_dla_serum_creatinine
+     cutpoint_dla_serum_creatinine <- cutp(Cox_dla_serum_creatinine)$zmn3 ## optymalny punkt odciecia
+     c_dla_serum_creatinine <- (zmn3>=cutpoint_dla_serum_creatinine$zmn3[1])*1+0 #jezeli zmienna jest >= punkotwi odciecia to przypisuje 1 w      przeciwnym wypadku 0
+```
+**Wartość po dychotymizacji:**
+```{r}
+     Cox_dla_serum_creatinine_d <- coxph(Surv(time, DEATH_EVENT)~c_dla_serum_creatinine,data=data_1)
+     A2_dla_serum_creatinine <- round(AIC(Cox_dla_serum_creatinine_d),2)
+     A2_dla_serum_creatinine
+```
+
+**Interpretacja:**
+
+Otrzymaliśmy gorszy wynik, ponieważ Akaike jest dużo wyższy niz przed dychotomizacją
+     
+### Wielomiany ulamkowe dla serum_creatinine
+```{r}
+     m3_dla_serum_creatinine <- mfp(Surv(time,DEATH_EVENT)~ fp(zmn3, df = 4, select = 0.05),family=cox, data=data_1) 
+     m3_dla_serum_creatinine
+     A3_dla_serum_creatinine <- round(AIC(m3_dla_serum_creatinine))
+     A3_dla_serum_creatinine
+```
+### Metoda wielomianowej funkcji sklejanej (splajn) dla serum_creatinine
+
+**Interpretacja:**
+
+- Dla bardzo niskich wartości kreatyniny (<1 mg/dL) hazard względny jest niestabilny i ma szeroki przedział ufności, co sugeruje małą liczbę obserwacji w tej grupie.
+- Dla wartości 1-2 mg/dL hazard względny wzrasta, po czym nieznacznie spada.
+- Dla wyższych wartości kreatyniny (>3 mg/dL) hazard względny ponownie wzrasta, co sugeruje zwiększone ryzyko śmierci u pacjentów z wysokim poziomem kreatyniny (co może być związane z niewydolnością nerek).
+- Szerokie przedziały ufności dla skrajnych wartości wskazują na dużą niepewność estymacji w tych zakresach.
+
+```{r}
+     int_dla_serum_creatinine <- quantile(na.omit(zmn3),probs=c(0.05,0.275,.5,.725,.95))
+     Cox_dla_serum_creatinine2 <- coxph(Surv(time,DEATH_EVENT)~ns(zmn3,knots=int_dla_serum_creatinine),data=data_1)
+     pred2 <- predict(Cox_dla_serum_creatinine2,type="terms",se.fit=TRUE, terms=1)
+     plot(na.omit(zmn3),exp(pred2$fit),type="n",main="Hazard względny w zależności od poziomu kreatyniny w surowicy",xlab=lab3,ylim=c(0,2.5),
+          ylab="Hazard względny")
+     lines(smooth.spline(na.omit(zmn3),exp(pred2$fit+1.96*pred2$se.fit)),lty=2)
+     lines(smooth.spline(na.omit(zmn3),exp(pred2$fit-1.96*pred2$se.fit)),lty=2)
+     lines(smooth.spline(na.omit(zmn3),exp(pred2$fit)),lty=1)
+     abline(h=1,lty=3)
+     legend('topright',2,c("splajn","95% przedzial ufnosci"), lty=1:2, box.lty=0)
+     A4_dla_serum_creatinine  <- round(AIC(Cox_dla_serum_creatinine2),2)
+     A4_dla_serum_creatinine 
+```
+
+## TRANSFORMACJA ZMIENNEJ serum_sodium
+### Dychotomizacja
+**Wartość przed dychotymizacją:**
+```{r}
+     Cox_dla_serum_sodium <- coxph(Surv(time, DEATH_EVENT)~zmn4,data=data_1)
+     A1_dla_serum_sodium <- round(AIC(Cox_jednostki_wplywowe),2) #akaike z modelu coxa
+     A1_dla_serum_sodium
+     cutpoint_dla_serum_sodium <- cutp(Cox_dla_serum_sodium)$zmn4 ## optymalny punkt odciecia
+     c_dla_serum_sodium <- (zmn4>=cutpoint_dla_serum_sodium$zmn4[1])*1+0 #jezeli zmienna jest >= punkotwi odciecia to przypisuje 1 w      przeciwnym wypadku 0
+```
+**Wartość po dychotymizacji:**
+```{r}
+     Cox_dla_serum_sodium_d <- coxph(Surv(time, DEATH_EVENT)~c_dla_serum_sodium,data=data_1)
+     A2_dla_serum_sodium <- round(AIC(Cox_dla_serum_sodium_d),2)
+     A2_dla_serum_sodium
+```
+
+**Interpretacja:**
+
+Otrzymaliśmy gorszy wynik, ponieważ Akaike jest dużo wyższy niz przed dychotomizacją
+    
+### Wielomiany ulamkowe dla serum_sodium
+```{r wielomiany ulamkowe dla serum_sodium}
+     m3_dla_serum_sodium <- mfp(Surv(time,DEATH_EVENT)~ fp(zmn4, df = 4, select = 0.05),family=cox, data=data_1) 
+     m3_dla_serum_sodium
+     A3_dla_serum_sodium <- round(AIC(m3_dla_serum_sodium))
+     A3_dla_serum_sodium
+```
+### Metoda wielomianowej funkcji sklejanej (splajn) dla serum_sodium
+
+**Interpretacja:**
+
+- Dla bardzo niskich wartości sodu (<130 mEq/L) hazard względny jest wysoki, co sugeruje większe ryzyko śmierci u pacjentów z hiponatremią (niskim poziomem sodu).
+- Dla wartości 135–140 mEq/L hazard względny jest najniższy, co może wskazywać na optymalny zakres poziomu sodu dla przeżycia.
+- Dla wysokich wartości sodu (>145 mEq/L) hazard względny ponownie wzrasta, co sugeruje zwiększone ryzyko zgonu w przypadku hipernatremii (wysokiego poziomu sodu).
+- Szeroki przedział ufności dla skrajnych wartości sodu oznacza większą niepewność oszacowań, co może wynikać z mniejszej liczby pacjentów w tych zakresach.
+
+```{r}
+     int_dla_serum_sodium <- quantile(na.omit(zmn4),probs=c(0.05,0.275,.5,.725,.95))
+     Cox_dla_serum_sodium2 <- coxph(Surv(time,DEATH_EVENT)~ns(zmn4,knots=int_dla_serum_sodium),data=data_1)
+     pred3 <- predict(Cox_dla_serum_sodium2,type="terms",se.fit=TRUE, terms=1)
+     plot(na.omit(zmn4),exp(pred3$fit),type="n",main="Hazard względny w zależności od poziomu sodu w surowicy",xlab=lab3,ylim=c(0,2.5),
+          ylab="Hazard względny")
+     lines(smooth.spline(na.omit(zmn4),exp(pred3$fit+1.96*pred3$se.fit)),lty=2)
+     lines(smooth.spline(na.omit(zmn4),exp(pred3$fit-1.96*pred3$se.fit)),lty=2)
+     lines(smooth.spline(na.omit(zmn4),exp(pred3$fit)),lty=1)
+     abline(h=1,lty=3)
+     legend('topright',2,c("splajn","95% przedzial ufnosci"), lty=1:2, box.lty=0)
+     A4_dla_serum_sodium  <- round(AIC(Cox_dla_serum_sodium2),2)
+     A4_dla_serum_sodium
+```
+
+
+
+## PODSUMOWANIE TRANSFORMACJI ZMIENNYCH
+
+**Transformacje zmiennej creatinine_phosphokinase:**
+
+- A1_dla_creatinine_phosphokinase - model bez tranformacji
+- A2_dla_creatinine_phosphokinase - po dychotomizacji
+- A3_dla_creatinine_phosphokinase - wielomiany ułamkowe
+- A4_dla_creatinine_phosphokinase - splajn
+
+```{r}
+rbind(A1_dla_creatinine_phosphokinase,A2_dla_creatinine_phosphokinase,A3_dla_creatinine_phosphokinase,A4_dla_creatinine_phosphokinase)
+```
+
+**Transformacje zmiennej serum_creatinine:**
+
+- A1_dla_serum_creatinine - model bez tranformacji
+- A2_dla_serum_creatinine - po dychotomizacji
+- A3_dla_serum_creatinine - wielomiany ułamkowe
+- A4_dla_serum_creatinine - splajn
+
+```{r}
+rbind(A1_dla_serum_creatinine,A2_dla_serum_creatinine,A3_dla_serum_creatinine,A4_dla_serum_creatinine)
+```
+
+**Transformacje zmiennej serum_sodium:**
+
+- A1_dla_serum_sodium - model bez tranformacji
+- A2_dla_serum_sodium - po dychotomizacji
+- A3_dla_serum_sodium - wielomiany ułamkowe
+- A4_dla_serum_sodium - splajn
+```{r}
+rbind(A1_dla_serum_sodium,A2_dla_serum_sodium,A3_dla_serum_sodium,A4_dla_serum_sodium)
+```
+
+Mimo wszystko najlepszym modelem jest model bez transformacji zmiennych, czyli:
+```{r}
+  summary(Cox_jednostki_wplywowe)
+```
+**INTERPRETACJA:**
+
+- jezeli wiek wzrosnie o 1 rok, hazard (ryzyko zgonu pod warunkiem, że jednostka dożyje do danego momentu) rośnie o 5,2%, ceteris paribus,
+- pacjenci z obecnością anemii mają hazard o 48,3% wyższy niz pacjenci z anemią = 0, ceteris paribus,
+- wraz ze wzrostem kinazy kreatynowej o 1, hazard nie zmienia się, ceteris paribus,
+- pacjenci z obecnościa wysokiego ciśnienia krwi,  mają hazard wyższy o 74,8%  niż pacjenci z ciśnieniem w normie, ceteris paribus,
+- wraz ze wzrostem kreatyniny o 1, hazard rośnie o 46,2%, ceteris paribus,
+- wraz ze wzrostem sodu o 1, hazard maleje o 0,6%, ceteris paribus.
+
+# Miary Dopasowania
+
+Poniżej ukazano miary dopasowania R2, (obliczone na podstawie statystyki cząstkowej ilorazu wiarygodności w modelu Coxa) Najlepiej dopasowanym modelem (o największej wartości tej miary = 0,57) jest model cox1_po_AIC otrzymany metodą krokową, przed odrzuceniem zmiennych niespełniajacych założeń proporcjonalnosci oraz jednostek odstających i wpływowych. 
+```{r}
+     r2_1 <- coxr2(cox1_po_AIC) #model otrzymany metoda krokowa przed sprawdzeniem zalozen proporcjonalnosci (uznany za najlepszy)
+     r2_2 <- coxr2(cox1_po_procjonalnosci) #model po odrzuceniu zmiennych niespelniajacych zalozen proporcjonalnosci
+     r2_3 <- coxr2(Cox_jednostki_wplywowe) #model po odrzuceniu jednostek odstajacych i wplywowych 
+     round(rbind(r2_1$rsq, r2_2$rsq, r2_3$rsq),2)
+```
+
+
+# Wskaznik Briera
+
+**Interpretacja:**
+
+Wynik 0.6573949 dla wskaźnika Briera oznacza jakość prognozy probabilistycznej. Wskaźnik Briera mierzy średni błąd kwadratowy przewidywań probabilistycznych w stosunku do rzeczywistych wyników i przyjmuje wartości od 0 do 1 (lub teoretycznie więcej, ale standardowo wartości mieszczą się w tym zakresie).
+
+**Zakres wartości wskaźnika Briera:**
+
+0 → Idealna prognoza (brak błędu, pewność co do poprawnej prognozy)
+0.25 → Przypadkowe przewidywania dla problemu dwuklasowego (np. rzut monetą dla klasyfikacji 0/1)
+1 → Najgorsza możliwa prognoza (pewność co do złego wyniku)
+
+**Co oznacza 0.657?**
+
+**Taka wartość sugeruje, że prognoza probabilistyczna ma dość duży błąd.**
+Jeżeli wynik jest bliższy 1, oznacza, że przewidywania były bardzo niedokładne.
+Dla modeli probabilistycznych dobre wartości wskaźnika Briera zazwyczaj są poniżej 0.25 (dla klasyfikacji binarnej)
+
+```{r Wskaznik Briera, eval=FALSE, include=FALSE}
+# Ten kod nie działa w knit dlatego musielismy go niestety ukryć :/
+    #brier(Surv(data_1$time, data_1$DEATH_EVENT), predict(Cox_jednostki_wplywowe), times = 285) 
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
